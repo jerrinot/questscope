@@ -1,0 +1,2365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuestDB Log Analyzer</title>
+    
+    <!-- Chart.js for charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    
+    <!-- Plotly.js for advanced visualizations -->
+    <script src="https://cdn.plot.ly/plotly-2.28.0.min.js"></script>
+    
+    <!-- Bootstrap for styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <style>
+        .chart-container {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .stats-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .upload-area:hover {
+            border-color: #007bff;
+            background: #f8f9fa;
+        }
+        .upload-area.dragover {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        .progress-container {
+            display: none;
+            margin: 20px 0;
+        }
+        .chart-tabs {
+            margin: 20px 0;
+        }
+        #results {
+            display: none;
+        }
+        .chart-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        @media (max-width: 768px) {
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <header class="text-center py-4">
+            <h1 class="display-4">🗃️ QuestDB Log Analyzer</h1>
+            <p class="lead">Interactive analysis of QuestDB query execution logs</p>
+        </header>
+
+        <!-- File Upload Section -->
+        <div class="row">
+            <div class="col-12">
+                <div class="upload-area" id="uploadArea">
+                    <i class="bi bi-cloud-upload" style="font-size: 3rem; color: #6c757d;"></i>
+                    <h4>Upload QuestDB Log Files</h4>
+                    <p>Drag and drop log files here, or click to select</p>
+                    <input type="file" id="fileInput" multiple style="display: none;">
+                    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                        Choose Files
+                    </button>
+                </div>
+                
+                <div class="progress-container" id="progressContainer">
+                    <div class="progress">
+                        <div class="progress-bar" 
+                             id="progressBar" role="progressbar" style="width: 0%">
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <small id="progressText">Processing files...</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results">
+            <!-- File Info Section -->
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Imported Log Files</h5>
+                    <div id="fileInfo">
+                        <!-- File information will be populated here -->
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Statistics Cards -->
+            <div class="row" id="statsRow">
+                <!-- Stats will be populated by JavaScript -->
+            </div>
+
+            <!-- Chart Tabs -->
+            <ul class="nav nav-tabs chart-tabs" id="chartTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="timeline-tab" data-bs-toggle="tab" 
+                            data-bs-target="#timeline-pane" type="button" role="tab">
+                        Timeline
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="frequency-tab" data-bs-toggle="tab" 
+                            data-bs-target="#frequency-pane" type="button" role="tab">
+                        Frequency
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="distribution-tab" data-bs-toggle="tab" 
+                            data-bs-target="#distribution-pane" type="button" role="tab">
+                        Distribution
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="heatmap-tab" data-bs-toggle="tab" 
+                            data-bs-target="#heatmap-pane" type="button" role="tab">
+                        Heatmaps
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="slowest-tab" data-bs-toggle="tab" 
+                            data-bs-target="#slowest-pane" type="button" role="tab">
+                        Slowest Queries
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="errors-tab" data-bs-toggle="tab" 
+                            data-bs-target="#errors-pane" type="button" role="tab">
+                        Events
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="wal-tab" data-bs-toggle="tab" 
+                            data-bs-target="#wal-pane" type="button" role="tab">
+                        Write Amplification
+                    </button>
+                </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content" id="chartTabContent">
+                <!-- Timeline Tab -->
+                <div class="tab-pane fade show active" id="timeline-pane" role="tabpanel">
+                    <div class="chart-container">
+                        <h5>Average Execution Time Over Time</h5>
+                        <canvas id="timelineChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+
+                <!-- Frequency Tab -->
+                <div class="tab-pane fade" id="frequency-pane" role="tabpanel">
+                    <div class="chart-container">
+                        <h5>Query Frequency Over Time</h5>
+                        <canvas id="frequencyChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+
+                <!-- Distribution Tab -->
+                <div class="tab-pane fade" id="distribution-pane" role="tabpanel">
+                    <div class="chart-grid">
+                        <div class="chart-container">
+                            <h5>Execution Time Distribution</h5>
+                            <canvas id="histogramChart" width="400" height="300"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h5>Box Plot</h5>
+                            <div id="boxPlot" style="height: 400px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Heatmap Tab -->
+                <div class="tab-pane fade" id="heatmap-pane" role="tabpanel">
+                    <div class="chart-container">
+                        <h5>Query Count Heatmap</h5>
+                        <div id="heatmapCount" style="height: 600px; width: 100%;"></div>
+                    </div>
+                    <div class="chart-container">
+                        <h5>Average Execution Time Heatmap (with counts)</h5>
+                        <div id="heatmapAvg" style="height: 700px; width: 100%;"></div>
+                    </div>
+                    <div class="chart-container">
+                        <h5>P99 (99th Percentile) Execution Time Heatmap (with counts)</h5>
+                        <div id="heatmapP99" style="height: 700px; width: 100%;"></div>
+                    </div>
+                    <div class="chart-container">
+                        <h5>Maximum Execution Time Heatmap (with counts)</h5>
+                        <div id="heatmapMax" style="height: 700px; width: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- Slowest Queries Tab -->
+                <div class="tab-pane fade" id="slowest-pane" role="tabpanel">
+                    <div class="chart-container">
+                        <h5>Slowest Query Types</h5>
+                        <canvas id="slowestChart" width="400" height="400"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Events Tab -->
+                <div class="tab-pane fade" id="errors-pane" role="tabpanel">
+                    <div class="chart-container">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5>Events Over Time</h5>
+                            <div class="d-flex align-items-center gap-3">
+                                <label for="tableFilter" class="form-label mb-0">Filter by Table:</label>
+                                <select id="tableFilter" class="form-select" style="width: 200px;">
+                                    <option value="all">All Tables</option>
+                                </select>
+                            </div>
+                        </div>
+                        <canvas id="connectionErrorChart" width="400" height="200"></canvas>
+                    </div>
+                    <div class="chart-grid">
+                        <div class="chart-container">
+                            <h5>Event Type Distribution</h5>
+                            <canvas id="errorTypeChart" width="400" height="300"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h5>Event Log Details</h5>
+                            <div id="errorLogTable" style="height: 400px; overflow-y: auto;">
+                                <table class="table table-sm table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Time</th>
+                                            <th>Event Type</th>
+                                            <th>Table</th>
+                                            <th>Count</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="errorTableBody">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- WAL Amplification Tab -->
+                <div class="tab-pane fade" id="wal-pane" role="tabpanel">
+                    <div class="chart-container">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5>Write Amplification Over Time</h5>
+                            <div class="d-flex align-items-center gap-3">
+                                <label for="walTableFilter" class="form-label mb-0">Filter by Table:</label>
+                                <select id="walTableFilter" class="form-select" style="width: 200px;">
+                                    <option value="all">All Tables</option>
+                                </select>
+                            </div>
+                        </div>
+                        <canvas id="walAmplificationChart" width="400" height="200"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h5>Write Amplification Over Time (Log Scale)</h5>
+                        <canvas id="walAmplificationLogChart" width="400" height="200"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h5>Write Rate Over Time</h5>
+                        <canvas id="walRateChart" width="400" height="200"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h5>WAL Commit Rate Over Time</h5>
+                        <canvas id="walCommitChart" width="400" height="200"></canvas>
+                    </div>
+                    <div class="chart-grid">
+                        <div class="chart-container">
+                            <h5>Amplification by Table</h5>
+                            <canvas id="walTableChart" width="400" height="300"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <h5>WAL Performance Metrics</h5>
+                            <div id="walMetricsTable" style="height: 400px; overflow-y: auto;">
+                                <table class="table table-sm table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Table</th>
+                                            <th>Avg Amplification</th>
+                                            <th>Total Rows</th>
+                                            <th>Avg Rate (rows/s)</th>
+                                            <th>Jobs</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="walTableBody">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Global variables
+        let parsedData = [];
+        let errorData = [];
+        let walData = []; // Track WAL write amplification data
+        let charts = {};
+        let seriesVisibility = {}; // Track which series are visible
+        let fileMetadata = []; // Track file names and timestamp ranges
+
+        // File upload handling
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const resultsSection = document.getElementById('results');
+
+        // Drag and drop events
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files);
+            handleFiles(files);
+        });
+
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            handleFiles(files);
+        });
+
+        // Log parsing function with memory optimization and error tracking
+        function parseQuestDBLog(logContent, fileName) {
+            const lines = logContent.split('\n');
+            const data = [];
+            const errors = [];
+            const walJobs = [];
+            const queryPattern = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z).*?QueryProgress\s+(fin|exe).*?sql=`([^`]+)`.*?time=(\d+)]/;
+            
+            // Patterns to track - errors and performance impacting events
+            const errorPatterns = {
+                'Connection Limit': /max connection limit reached.*unregistered listener/i
+            };
+            
+            // Special patterns for table extraction
+            const o3PartitionPattern = /o3 split partition \[table=([^,]+)/i;
+            const partitionSquashingPattern = /squashing partitions \[table=([^,]+)/i;
+            
+            // WAL amplification pattern - matches both "job finished" and "job ejected"
+            const walPattern = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z).*?ApplyWal2TableJob job (?:finished|ejected) \[table=([^,]+), seqTxn=\d+, transactions=(\d+), rows=(\d+), time=(\d+)ms, rate=(\d+)rows\/s, ampl=([\d.]+)\]/;
+            
+            // WAL commit pattern
+            const walCommitPattern = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z).*?WalWriter commit \[wal=\/([^\/]+)\/.*?, segTxn=\d+, seqTxn=\d+, rowLo=(\d+), rowHi=(\d+),/;
+            
+            let processed = 0;
+            const totalLines = lines.length;
+            
+            for (let i = 0; i < totalLines; i++) {
+                const line = lines[i];
+                processed++;
+                
+                if (processed % 1000 === 0) {
+                    updateProgress((processed / totalLines) * 50, `Processing ${fileName}: ${processed}/${totalLines} lines...`);
+                }
+
+                // Check for query data
+                const queryMatch = line.match(queryPattern);
+                if (queryMatch && queryMatch[2] === 'fin') {
+                    const [, timestampStr, status, sql, timeNanos] = queryMatch;
+                    
+                    try {
+                        const timestamp = new Date(timestampStr);
+                        const timeMs = parseInt(timeNanos) / 1_000_000; // Convert nanoseconds to milliseconds
+                        const sqlPreview = sql.split(' ').slice(0, 5).join(' ') + (sql.split(' ').length > 5 ? '...' : '');
+                        
+                        data.push({
+                            timestamp,
+                            executionTimeMs: timeMs,
+                            sqlPreview,
+                            fullSql: sql,
+                            file: fileName
+                        });
+                    } catch (e) {
+                        console.warn('Error parsing query line:', e);
+                    }
+                }
+                
+                // Check for errors - extract timestamp if available
+                const timestampMatch = line.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z)/);
+                if (timestampMatch) {
+                    // Check regular error patterns first
+                    let foundError = false;
+                    for (const [errorType, pattern] of Object.entries(errorPatterns)) {
+                        if (pattern.test(line)) {
+                            try {
+                                const timestamp = new Date(timestampMatch[1]);
+                                errors.push({
+                                    timestamp,
+                                    errorType,
+                                    message: line.substring(0, 200), // Truncate long messages
+                                    file: fileName
+                                });
+                                foundError = true;
+                            } catch (e) {
+                                console.warn('Error parsing error line:', e);
+                            }
+                            break; // Only classify as one error type
+                        }
+                    }
+                    
+                    // Check O3 partition split pattern separately to extract table name
+                    if (!foundError) {
+                        const o3Match = line.match(o3PartitionPattern);
+                        if (o3Match) {
+                            try {
+                                const timestamp = new Date(timestampMatch[1]);
+                                const rawTableName = o3Match[1].trim();
+                                // Remove tilde and everything after it
+                                const tableName = rawTableName.split('~')[0];
+                                errors.push({
+                                    timestamp,
+                                    errorType: 'O3 Partition Split',
+                                    tableName: tableName,
+                                    message: line.substring(0, 200), // Truncate long messages
+                                    file: fileName
+                                });
+                                foundError = true;
+                            } catch (e) {
+                                console.warn('Error parsing O3 partition split line:', e);
+                            }
+                        }
+                    }
+                    
+                    // Check partition squashing pattern to extract table name
+                    if (!foundError) {
+                        const partitionMatch = line.match(partitionSquashingPattern);
+                        if (partitionMatch) {
+                            try {
+                                const timestamp = new Date(timestampMatch[1]);
+                                const rawTableName = partitionMatch[1].trim();
+                                // Remove tilde and everything after it
+                                const tableName = rawTableName.split('~')[0];
+                                errors.push({
+                                    timestamp,
+                                    errorType: 'Partition Squashing',
+                                    tableName: tableName,
+                                    message: line.substring(0, 200), // Truncate long messages
+                                    file: fileName
+                                });
+                            } catch (e) {
+                                console.warn('Error parsing partition squashing line:', e);
+                            }
+                        }
+                    }
+                }
+                
+                // Check for WAL job data
+                const walMatch = line.match(walPattern);
+                if (walMatch) {
+                    try {
+                        const [, timestampStr, tableNameRaw, transactions, rows, timeMs, rate, amplification] = walMatch;
+                        const timestamp = new Date(timestampStr);
+                        // Remove tilde and everything after it
+                        const tableName = tableNameRaw.split('~')[0].trim();
+                        
+                        walJobs.push({
+                            timestamp,
+                            tableName,
+                            transactions: parseInt(transactions),
+                            rows: parseInt(rows),
+                            timeMs: parseInt(timeMs),
+                            rate: parseInt(rate),
+                            amplification: parseFloat(amplification),
+                            file: fileName,
+                            type: 'apply'
+                        });
+                    } catch (e) {
+                        console.warn('Error parsing WAL job line:', e);
+                    }
+                }
+                
+                // Check for WAL commit data
+                const walCommitMatch = line.match(walCommitPattern);
+                if (walCommitMatch) {
+                    try {
+                        const [, timestampStr, tablePathRaw, rowLo, rowHi] = walCommitMatch;
+                        const timestamp = new Date(timestampStr);
+                        // Extract table name from path and remove tilde suffix
+                        const tableName = tablePathRaw.split('~')[0].trim();
+                        const rows = parseInt(rowHi) - parseInt(rowLo);
+                        
+                        walJobs.push({
+                            timestamp,
+                            tableName,
+                            rows: rows,
+                            file: fileName,
+                            type: 'commit'
+                        });
+                    } catch (e) {
+                        console.warn('Error parsing WAL commit line:', e);
+                    }
+                }
+                
+                // Clear the line from memory after processing
+                lines[i] = null;
+            }
+            
+            // Calculate timestamp range for this file
+            let minTimestamp = null;
+            let maxTimestamp = null;
+            
+            if (data.length > 0) {
+                minTimestamp = new Date(Math.min(...data.map(d => d.timestamp.getTime())));
+                maxTimestamp = new Date(Math.max(...data.map(d => d.timestamp.getTime())));
+            }
+            
+            if (errors.length > 0) {
+                const errorMin = new Date(Math.min(...errors.map(e => e.timestamp.getTime())));
+                const errorMax = new Date(Math.max(...errors.map(e => e.timestamp.getTime())));
+                minTimestamp = minTimestamp ? new Date(Math.min(minTimestamp.getTime(), errorMin.getTime())) : errorMin;
+                maxTimestamp = maxTimestamp ? new Date(Math.max(maxTimestamp.getTime(), errorMax.getTime())) : errorMax;
+            }
+            
+            if (walJobs.length > 0) {
+                const walMin = new Date(Math.min(...walJobs.map(w => w.timestamp.getTime())));
+                const walMax = new Date(Math.max(...walJobs.map(w => w.timestamp.getTime())));
+                minTimestamp = minTimestamp ? new Date(Math.min(minTimestamp.getTime(), walMin.getTime())) : walMin;
+                maxTimestamp = maxTimestamp ? new Date(Math.max(maxTimestamp.getTime(), walMax.getTime())) : walMax;
+            }
+            
+            const metadata = {
+                fileName: fileName,
+                minTimestamp: minTimestamp,
+                maxTimestamp: maxTimestamp,
+                queryCount: data.length,
+                errorCount: errors.length,
+                walJobCount: walJobs.length
+            };
+            
+            return { queries: data, errors: errors, walJobs: walJobs, metadata: metadata };
+        }
+
+        // File handling function
+        async function handleFiles(files) {
+            if (files.length === 0) return;
+            
+            parsedData = [];
+            errorData = [];
+            walData = [];
+            fileMetadata = [];
+            progressContainer.style.display = 'block';
+            resultsSection.style.display = 'none';
+            
+            updateProgress(0, 'Starting file processing...');
+            
+            try {
+                // Calculate total file size
+                const totalSize = Array.from(files).reduce((sum, file) => sum + file.size, 0);
+                const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+                
+                if (totalSize > 500 * 1024 * 1024) { // 500MB warning
+                    if (!confirm(`Warning: Total file size is ${totalSizeMB}MB. Processing large files may take time and use significant memory. Continue?`)) {
+                        progressContainer.style.display = 'none';
+                        return;
+                    }
+                }
+                
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                    updateProgress((i / files.length) * 100, `Reading ${file.name} (${fileSizeMB}MB)...`);
+                    
+                    const content = await readFile(file);
+                    const result = parseQuestDBLog(content, file.name);
+                    
+                    // Use concat instead of spread to avoid argument limit
+                    parsedData = parsedData.concat(result.queries);
+                    errorData = errorData.concat(result.errors);
+                    if (result.walJobs) {
+                        walData = walData.concat(result.walJobs);
+                    }
+                    
+                    // Collect metadata
+                    if (result.metadata) {
+                        fileMetadata.push(result.metadata);
+                    }
+                    
+                    updateProgress(((i + 1) / files.length) * 100, `Processed ${file.name} - Found ${result.queries.length} queries, ${result.errors.length} errors`);
+                }
+                
+                if (parsedData.length === 0) {
+                    throw new Error('No valid query data found in the uploaded files');
+                }
+                
+                // Sort by timestamp
+                parsedData.sort((a, b) => a.timestamp - b.timestamp);
+                
+                updateProgress(100, 'Generating visualizations...');
+                await generateVisualizations();
+                
+                progressContainer.style.display = 'none';
+                resultsSection.style.display = 'block';
+                
+                // Scroll to results
+                resultsSection.scrollIntoView({ behavior: 'smooth' });
+                
+            } catch (error) {
+                console.error('Error processing files:', error);
+                updateProgress(0, `Error: ${error.message}`);
+                progressBar.classList.add('bg-danger');
+            }
+        }
+
+        function readFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = reject;
+                reader.readAsText(file);
+            });
+        }
+
+        function updateProgress(percentage, text) {
+            progressBar.style.width = `${percentage}%`;
+            progressText.textContent = text;
+        }
+        
+        // Display file metadata
+        function displayFileInfo() {
+            const fileInfoDiv = document.getElementById('fileInfo');
+            if (!fileInfoDiv || fileMetadata.length === 0) return;
+            
+            // Calculate overall timestamp range
+            let overallMin = null;
+            let overallMax = null;
+            
+            fileMetadata.forEach(meta => {
+                if (meta.minTimestamp) {
+                    overallMin = overallMin ? new Date(Math.min(overallMin.getTime(), meta.minTimestamp.getTime())) : meta.minTimestamp;
+                }
+                if (meta.maxTimestamp) {
+                    overallMax = overallMax ? new Date(Math.max(overallMax.getTime(), meta.maxTimestamp.getTime())) : meta.maxTimestamp;
+                }
+            });
+            
+            // Create HTML for file info display
+            let html = '<div class="table-responsive"><table class="table table-sm">';
+            html += '<thead><tr><th>File Name</th><th>Time Range</th><th>Queries</th><th>Events</th></tr></thead>';
+            html += '<tbody>';
+            
+            fileMetadata.forEach(meta => {
+                const timeRange = meta.minTimestamp && meta.maxTimestamp ? 
+                    `${meta.minTimestamp.toLocaleString()} - ${meta.maxTimestamp.toLocaleString()}` : 
+                    'No timestamps found';
+                html += `<tr>
+                    <td><code>${meta.fileName}</code></td>
+                    <td><small>${timeRange}</small></td>
+                    <td>${meta.queryCount.toLocaleString()}</td>
+                    <td>${meta.errorCount.toLocaleString()}</td>
+                </tr>`;
+            });
+            
+            html += '</tbody></table></div>';
+            
+            // Add overall summary
+            if (overallMin && overallMax) {
+                const duration = (overallMax.getTime() - overallMin.getTime()) / 1000; // in seconds
+                const durationStr = duration < 3600 ? 
+                    `${Math.round(duration / 60)} minutes` : 
+                    `${(duration / 3600).toFixed(1)} hours`;
+                
+                html += `<div class="mt-2 text-muted">
+                    <strong>Overall Time Range:</strong> ${overallMin.toLocaleString()} - ${overallMax.toLocaleString()} 
+                    <span class="badge bg-secondary ms-2">${durationStr}</span>
+                </div>`;
+            }
+            
+            fileInfoDiv.innerHTML = html;
+        }
+
+        // Data processing functions
+        function groupBySecond(data) {
+            const grouped = {};
+            data.forEach(item => {
+                const second = new Date(item.timestamp);
+                second.setMilliseconds(0);
+                const key = second.getTime();
+                
+                if (!grouped[key]) {
+                    grouped[key] = [];
+                }
+                grouped[key].push(item);
+            });
+            
+            return Object.entries(grouped).map(([timestamp, items]) => ({
+                timestamp: new Date(parseInt(timestamp)),
+                items: items,
+                avgTime: items.reduce((sum, item) => sum + item.executionTimeMs, 0) / items.length,
+                maxTime: Math.max(...items.map(item => item.executionTimeMs)),
+                count: items.length
+            })).sort((a, b) => a.timestamp - b.timestamp);
+        }
+
+        function getTopQueries(data, limit = 12) {
+            const queryStats = {};
+            data.forEach(item => {
+                if (!queryStats[item.sqlPreview]) {
+                    queryStats[item.sqlPreview] = {
+                        count: 0,
+                        totalTime: 0,
+                        maxTime: 0
+                    };
+                }
+                queryStats[item.sqlPreview].count++;
+                queryStats[item.sqlPreview].totalTime += item.executionTimeMs;
+                queryStats[item.sqlPreview].maxTime = Math.max(queryStats[item.sqlPreview].maxTime, item.executionTimeMs);
+            });
+            
+            return Object.entries(queryStats)
+                .map(([query, stats]) => ({
+                    query,
+                    count: stats.count,
+                    avgTime: stats.totalTime / stats.count,
+                    maxTime: stats.maxTime,
+                    totalTime: stats.totalTime
+                }))
+                .sort((a, b) => b.count - a.count)
+                .slice(0, limit);
+        }
+
+        // Statistics generation
+        function generateStats(data) {
+            const times = data.map(d => d.executionTimeMs);
+            times.sort((a, b) => a - b);
+            
+            // Use reduce for min/max to avoid argument limit
+            const timestamps = data.map(d => d.timestamp.getTime());
+            const minTimestamp = timestamps.reduce((min, t) => t < min ? t : min, timestamps[0]);
+            const maxTimestamp = timestamps.reduce((max, t) => t > max ? t : max, timestamps[0]);
+            
+            const stats = {
+                totalQueries: data.length,
+                timeRange: {
+                    start: new Date(minTimestamp),
+                    end: new Date(maxTimestamp)
+                },
+                avgTime: times.reduce((sum, t) => sum + t, 0) / times.length,
+                medianTime: times[Math.floor(times.length / 2)],
+                minTime: times[0],  // Already sorted
+                maxTime: times[times.length - 1],  // Already sorted
+                p95Time: times[Math.floor(times.length * 0.95)],
+                p99Time: times[Math.floor(times.length * 0.99)]
+            };
+            
+            stats.duration = stats.timeRange.end - stats.timeRange.start;
+            stats.avgQPS = data.length / (stats.duration / 1000);
+            
+            return stats;
+        }
+
+        function displayStats(stats) {
+            const statsRow = document.getElementById('statsRow');
+            statsRow.innerHTML = `
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <h5>${stats.totalQueries.toLocaleString()}</h5>
+                        <p>Total Queries</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <h5>${stats.avgTime.toFixed(2)} ms</h5>
+                        <p>Average Time</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <h5>${stats.p95Time.toFixed(2)} ms</h5>
+                        <p>95th Percentile</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <h5>${stats.avgQPS.toFixed(0)}</h5>
+                        <p>Avg QPS</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Chart generation functions
+        async function generateVisualizations() {
+            const stats = generateStats(parsedData);
+            displayStats(stats);
+            
+            // Display file information
+            displayFileInfo();
+            
+            const timeGrouped = groupBySecond(parsedData);
+            const topQueries = getTopQueries(parsedData);
+            
+            // Clear existing charts
+            Object.values(charts).forEach(chart => {
+                if (chart && typeof chart.destroy === 'function') {
+                    chart.destroy();
+                }
+            });
+            charts = {};
+            
+            // Generate all charts
+            await createTimelineChart(timeGrouped);
+            await createFrequencyChart(timeGrouped);
+            await createHistogramChart(parsedData);
+            await createBoxPlot(parsedData);
+            await createHeatmaps(parsedData, topQueries);
+            await createSlowestChart(topQueries);
+            
+            // Generate error charts if errors exist
+            if (errorData.length > 0) {
+                await createErrorCharts(errorData);
+            }
+            
+            // Generate WAL charts if WAL data exists
+            if (walData.length > 0) {
+                await createWalCharts();
+            }
+        }
+
+        function createTimelineChart(timeGrouped) {
+            const ctx = document.getElementById('timelineChart').getContext('2d');
+            
+            charts.timeline = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timeGrouped.map(d => d.timestamp),
+                    datasets: [{
+                        label: 'Average Execution Time (ms)',
+                        data: timeGrouped.map(d => d.avgTime),
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                displayFormats: {
+                                    second: 'HH:mm:ss'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Execution Time (ms)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const dataPoint = timeGrouped[context.dataIndex];
+                                    return `Queries: ${dataPoint.count}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createFrequencyChart(timeGrouped) {
+            const ctx = document.getElementById('frequencyChart').getContext('2d');
+            
+            charts.frequency = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timeGrouped.map(d => d.timestamp),
+                    datasets: [{
+                        label: 'Queries per Second',
+                        data: timeGrouped.map(d => d.count),
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                displayFormats: {
+                                    second: 'HH:mm:ss'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Queries per Second'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createHistogramChart(data) {
+            const ctx = document.getElementById('histogramChart').getContext('2d');
+            
+            // Create histogram bins
+            const times = data.map(d => d.executionTimeMs);
+            // Sort times array for percentile calculation
+            const sortedTimes = [...times].sort((a, b) => a - b);
+            // Use sorted array to get max and 99th percentile without spread operator
+            const maxInData = sortedTimes[sortedTimes.length - 1];
+            const p99Value = sortedTimes[Math.floor(sortedTimes.length * 0.99)];
+            const maxTime = Math.min(maxInData, p99Value); // Cap at 99th percentile
+            const binSize = maxTime / 50;
+            const bins = Array(50).fill(0);
+            const binLabels = [];
+            
+            for (let i = 0; i < 50; i++) {
+                binLabels.push((i * binSize).toFixed(1));
+            }
+            
+            times.forEach(time => {
+                if (time <= maxTime) {
+                    const binIndex = Math.min(Math.floor(time / binSize), 49);
+                    bins[binIndex]++;
+                }
+            });
+            
+            charts.histogram = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: binLabels,
+                    datasets: [{
+                        label: 'Frequency',
+                        data: bins,
+                        backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Execution Time (ms)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Frequency'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createBoxPlot(data) {
+            const times = data.map(d => d.executionTimeMs);
+            times.sort((a, b) => a - b);
+            
+            // Calculate quartiles
+            const q1 = times[Math.floor(times.length * 0.25)];
+            const median = times[Math.floor(times.length * 0.5)];
+            const q3 = times[Math.floor(times.length * 0.75)];
+            const iqr = q3 - q1;
+            
+            // Filter outliers for display
+            const maxDisplay = Math.min(q3 + 1.5 * iqr, times[Math.floor(times.length * 0.99)]);
+            const filteredTimes = times.filter(t => t <= maxDisplay);
+            
+            const trace = {
+                y: filteredTimes,
+                type: 'box',
+                name: 'Execution Time',
+                boxpoints: 'outliers',
+                marker: {
+                    color: 'rgb(107, 174, 214)'
+                }
+            };
+            
+            const layout = {
+                title: 'Execution Time Distribution',
+                yaxis: {
+                    title: 'Execution Time (ms)'
+                },
+                margin: { t: 30 }
+            };
+            
+            Plotly.newPlot('boxPlot', [trace], layout, {responsive: true});
+        }
+
+        function createHeatmaps(data, topQueries) {
+            const timeGrouped = groupBySecond(data);
+            
+            // Shorten query names for better horizontal space usage
+            const queryNames = topQueries.map((q, i) => `Q${i+1}: ${q.query.substring(0, 20)}...`);
+            
+            // Create time labels with more samples for better horizontal usage
+            const timeLabels = timeGrouped.map(d => d.timestamp.toLocaleTimeString('en-US', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            }));
+            
+            // Use more time points for better horizontal space utilization
+            const sampleRate = Math.max(1, Math.floor(timeLabels.length / 40)); // Increased from 20 to 40
+            const sampledTimeLabels = timeLabels.filter((_, i) => i % sampleRate === 0);
+            const sampledTimeData = timeGrouped.filter((_, i) => i % sampleRate === 0);
+            
+            // Prepare heatmap data for average times, max times, P99, AND count data
+            const avgHeatmapData = [];
+            const maxHeatmapData = [];
+            const p99HeatmapData = [];
+            const countData = [];
+            
+            queryNames.forEach((queryName, index) => {
+                const fullQueryName = topQueries[index].query;
+                const avgRow = [];
+                const maxRow = [];
+                const p99Row = [];
+                const countRow = [];
+                
+                sampledTimeData.forEach(timePoint => {
+                    const queriesInTimePoint = timePoint.items.filter(item => item.sqlPreview === fullQueryName);
+                    if (queriesInTimePoint.length > 0) {
+                        const times = queriesInTimePoint.map(item => item.executionTimeMs);
+                        times.sort((a, b) => a - b);
+                        
+                        avgRow.push(times.reduce((sum, t) => sum + t, 0) / times.length);
+                        maxRow.push(times.reduce((max, t) => t > max ? t : max, times[0]));
+                        
+                        // Calculate P99 (99th percentile)
+                        const p99Index = Math.floor(times.length * 0.99);
+                        p99Row.push(times[Math.min(p99Index, times.length - 1)]);
+                        
+                        countRow.push(queriesInTimePoint.length);
+                    } else {
+                        avgRow.push(null);
+                        maxRow.push(null);
+                        p99Row.push(null);
+                        countRow.push(0);
+                    }
+                });
+                
+                avgHeatmapData.push(avgRow);
+                maxHeatmapData.push(maxRow);
+                p99HeatmapData.push(p99Row);
+                countData.push(countRow);
+            });
+            
+            // Average heatmap with custom text showing counts
+            const avgTrace = {
+                z: avgHeatmapData,
+                x: sampledTimeLabels,
+                y: queryNames,
+                type: 'heatmap',
+                colorscale: 'YlOrRd',
+                showscale: true,
+                zauto: true,  // Enable auto-scale by default
+                colorbar: {
+                    title: 'Avg Time (ms)',
+                    titleside: 'right',
+                    thickness: 20,
+                    len: 0.8
+                },
+                hoverongaps: false,
+                hovertemplate: '<b>%{y}</b><br>Time: %{x}<br>Avg Time: %{z:.2f}ms<br>Count: %{text}<extra></extra>',
+                text: countData,
+                texttemplate: '%{text}',
+                textfont: {
+                    size: 8,
+                    color: 'black'
+                }
+            };
+            
+            const avgLayout = {
+                title: {
+                    text: 'Average Execution Time by Query Type',
+                    font: { size: 16 }
+                },
+                xaxis: { 
+                    title: 'Time',
+                    tickangle: -45,
+                    tickfont: { size: 10 },
+                    side: 'bottom',
+                    autorange: true,
+                    rangeslider: { visible: false }
+                },
+                yaxis: { 
+                    title: 'Query Type',
+                    tickfont: { size: 9 },
+                    automargin: false,
+                    tickmode: 'array',
+                    tickvals: queryNames.map((_, i) => i),
+                    ticktext: queryNames,
+                    autorange: true
+                },
+                margin: { 
+                    l: 180,  // Reduced left margin - shorter query names
+                    r: 120,  // Right margin for colorbar
+                    t: 60,   // Top margin for title
+                    b: 80    // Bottom margin for x-axis labels
+                },
+                height: 800,
+                autosize: true
+            };
+            
+            const avgConfig = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
+                toImageButtonOptions: {
+                    format: 'png',
+                    filename: 'heatmap_avg',
+                    height: 700,
+                    width: 1400,
+                    scale: 1
+                }
+            };
+            
+            Plotly.newPlot('heatmapAvg', [avgTrace], avgLayout, avgConfig).then(function(gd) {
+                // Force a window resize event to trigger proper autoscale
+                window.dispatchEvent(new Event('resize'));
+                // Also update the plot to ensure it's properly scaled
+                Plotly.Plots.resize(gd);
+            });
+            
+            // P99 heatmap with custom text showing counts
+            const p99Trace = {
+                z: p99HeatmapData,
+                x: sampledTimeLabels,
+                y: queryNames,
+                type: 'heatmap',
+                colorscale: 'Oranges',
+                showscale: true,
+                zauto: true,  // Enable auto-scale by default
+                colorbar: {
+                    title: 'P99 Time (ms)',
+                    titleside: 'right',
+                    thickness: 20,
+                    len: 0.8
+                },
+                hoverongaps: false,
+                hovertemplate: '<b>%{y}</b><br>Time: %{x}<br>P99 Time: %{z:.2f}ms<br>Count: %{text}<extra></extra>',
+                text: countData,
+                texttemplate: '%{text}',
+                textfont: {
+                    size: 8,
+                    color: 'black'
+                }
+            };
+            
+            const p99Layout = {
+                title: {
+                    text: '99th Percentile Execution Time by Query Type',
+                    font: { size: 16 }
+                },
+                xaxis: { 
+                    title: 'Time',
+                    tickangle: -45,
+                    tickfont: { size: 10 },
+                    side: 'bottom',
+                    autorange: true,
+                    rangeslider: { visible: false }
+                },
+                yaxis: { 
+                    title: 'Query Type',
+                    tickfont: { size: 9 },
+                    automargin: false,
+                    tickmode: 'array',
+                    tickvals: queryNames.map((_, i) => i),
+                    ticktext: queryNames,
+                    autorange: true
+                },
+                margin: { 
+                    l: 180,  // Reduced left margin - shorter query names
+                    r: 120,  // Right margin for colorbar
+                    t: 60,   // Top margin for title
+                    b: 80    // Bottom margin for x-axis labels
+                },
+                height: 700,
+                autosize: true
+            };
+            
+            const p99Config = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
+                toImageButtonOptions: {
+                    format: 'png',
+                    filename: 'heatmap_p99',
+                    height: 700,
+                    width: 1400,
+                    scale: 1
+                }
+            };
+            
+            Plotly.newPlot('heatmapP99', [p99Trace], p99Layout, p99Config).then(function(gd) {
+                // Force a window resize event to trigger proper autoscale
+                window.dispatchEvent(new Event('resize'));
+                // Also update the plot to ensure it's properly scaled
+                Plotly.Plots.resize(gd);
+            });
+            
+            // Max heatmap with custom text showing counts
+            const maxTrace = {
+                z: maxHeatmapData,
+                x: sampledTimeLabels,
+                y: queryNames,
+                type: 'heatmap',
+                colorscale: 'Reds',
+                showscale: true,
+                zauto: true,  // Enable auto-scale by default
+                colorbar: {
+                    title: 'Max Time (ms)',
+                    titleside: 'right',
+                    thickness: 20,
+                    len: 0.8
+                },
+                hoverongaps: false,
+                hovertemplate: '<b>%{y}</b><br>Time: %{x}<br>Max Time: %{z:.2f}ms<br>Count: %{text}<extra></extra>',
+                text: countData,
+                texttemplate: '%{text}',
+                textfont: {
+                    size: 8,
+                    color: 'white'
+                }
+            };
+            
+            const maxLayout = {
+                title: {
+                    text: 'Maximum Execution Time by Query Type',
+                    font: { size: 16 }
+                },
+                xaxis: { 
+                    title: 'Time',
+                    tickangle: -45,
+                    tickfont: { size: 10 },
+                    side: 'bottom',
+                    autorange: true,
+                    rangeslider: { visible: false }
+                },
+                yaxis: { 
+                    title: 'Query Type',
+                    tickfont: { size: 9 },
+                    automargin: false,
+                    tickmode: 'array',
+                    tickvals: queryNames.map((_, i) => i),
+                    ticktext: queryNames,
+                    autorange: true
+                },
+                margin: { 
+                    l: 180,  // Reduced left margin - shorter query names
+                    r: 120,  // Right margin for colorbar
+                    t: 60,   // Top margin for title
+                    b: 80    // Bottom margin for x-axis labels
+                },
+                height: 800,
+                autosize: true
+            };
+            
+            const maxConfig = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
+                toImageButtonOptions: {
+                    format: 'png',
+                    filename: 'heatmap_max',
+                    height: 700,
+                    width: 1400,
+                    scale: 1
+                }
+            };
+            
+            Plotly.newPlot('heatmapMax', [maxTrace], maxLayout, maxConfig).then(function(gd) {
+                // Force a window resize event to trigger proper autoscale
+                window.dispatchEvent(new Event('resize'));
+                // Also update the plot to ensure it's properly scaled
+                Plotly.Plots.resize(gd);
+            });
+            
+            // Query count heatmap
+            const countTrace = {
+                z: countData,
+                x: sampledTimeLabels,
+                y: queryNames,
+                type: 'heatmap',
+                colorscale: 'Blues',
+                showscale: true,
+                zauto: true,  // Enable auto-scale by default
+                colorbar: {
+                    title: 'Query Count',
+                    titleside: 'right',
+                    thickness: 20,
+                    len: 0.8
+                },
+                hoverongaps: false,
+                hovertemplate: '<b>%{y}</b><br>Time: %{x}<br>Count: %{z}<extra></extra>',
+                text: countData,
+                texttemplate: '%{text}',
+                textfont: {
+                    size: 10,
+                    color: function(value) {
+                        return value > 50 ? 'white' : 'black';
+                    }
+                }
+            };
+            
+            const countLayout = {
+                title: {
+                    text: 'Query Count Distribution Over Time',
+                    font: { size: 16 }
+                },
+                xaxis: { 
+                    title: 'Time',
+                    tickangle: -45,
+                    tickfont: { size: 10 },
+                    side: 'bottom',
+                    autorange: true,
+                    rangeslider: { visible: false }
+                },
+                yaxis: { 
+                    title: 'Query Type',
+                    tickfont: { size: 9 },
+                    automargin: false,
+                    tickmode: 'array',
+                    tickvals: queryNames.map((_, i) => i),
+                    ticktext: queryNames,
+                    autorange: true
+                },
+                margin: { 
+                    l: 180,  // Reduced left margin - shorter query names
+                    r: 120,  // Right margin for colorbar
+                    t: 60,   // Top margin for title
+                    b: 80    // Bottom margin for x-axis labels
+                },
+                height: 600,
+                autosize: true
+            };
+            
+            const countConfig = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
+                toImageButtonOptions: {
+                    format: 'png',
+                    filename: 'heatmap_count',
+                    height: 600,
+                    width: 1400,
+                    scale: 1
+                }
+            };
+            
+            Plotly.newPlot('heatmapCount', [countTrace], countLayout, countConfig).then(function(gd) {
+                // Force a window resize event to trigger proper autoscale
+                window.dispatchEvent(new Event('resize'));
+                // Also update the plot to ensure it's properly scaled
+                Plotly.Plots.resize(gd);
+            });
+        }
+
+        function createSlowestChart(topQueries) {
+            const ctx = document.getElementById('slowestChart').getContext('2d');
+            
+            // Sort by average time and take top 10
+            const slowestQueries = [...topQueries]
+                .sort((a, b) => b.avgTime - a.avgTime)
+                .slice(0, 10);
+            
+            charts.slowest = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: slowestQueries.map(q => q.query.substring(0, 30) + '...'),
+                    datasets: [{
+                        label: 'Average Execution Time (ms)',
+                        data: slowestQueries.map(q => q.avgTime),
+                        backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    animation: false,
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const query = slowestQueries[context.dataIndex];
+                                    return [`Count: ${query.count}`, `Max: ${query.maxTime.toFixed(2)}ms`];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Average Execution Time (ms)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Error visualization functions
+        function populateTableFilter(errors) {
+            const tableFilter = document.getElementById('tableFilter');
+            if (!tableFilter) return;
+            
+            // Get unique table names from O3 Partition Split and Partition Squashing errors
+            const tableNames = new Set();
+            errors.forEach(error => {
+                if ((error.errorType === 'O3 Partition Split' || error.errorType === 'Partition Squashing') && error.tableName) {
+                    tableNames.add(error.tableName);
+                }
+            });
+            
+            // Clear existing options except "All Tables"
+            tableFilter.innerHTML = '<option value="all">All Tables</option>';
+            
+            // Add table name options
+            Array.from(tableNames).sort().forEach(tableName => {
+                const option = document.createElement('option');
+                option.value = tableName;
+                option.textContent = tableName;
+                tableFilter.appendChild(option);
+            });
+            
+            // Add event listener for filter changes
+            tableFilter.onchange = () => filterByTable();
+        }
+        
+        function filterByTable() {
+            const selectedTable = document.getElementById('tableFilter').value;
+            
+            // Filter errorData based on selected table
+            let filteredErrors = errorData;
+            if (selectedTable !== 'all') {
+                filteredErrors = errorData.filter(error => {
+                    if (error.errorType === 'O3 Partition Split' || error.errorType === 'Partition Squashing') {
+                        return error.tableName === selectedTable;
+                    }
+                    // For other events (like Connection Limit), show all
+                    return true;
+                });
+            }
+            
+            // Recreate charts with filtered data
+            createErrorCharts(filteredErrors);
+        }
+        
+        function createErrorCharts(errors) {
+            // Sort errors by timestamp
+            errors.sort((a, b) => a.timestamp - b.timestamp);
+            
+            // Group errors by second for time series
+            const errorsBySecond = {};
+            const connectionLimitBySecond = {};
+            
+            errors.forEach(error => {
+                const second = new Date(error.timestamp);
+                second.setMilliseconds(0);
+                const key = second.getTime();
+                
+                if (!errorsBySecond[key]) {
+                    errorsBySecond[key] = {};
+                }
+                
+                if (!errorsBySecond[key][error.errorType]) {
+                    errorsBySecond[key][error.errorType] = 0;
+                }
+                errorsBySecond[key][error.errorType]++;
+                
+                // Track connection limit errors specifically
+                if (error.errorType === 'Connection Limit') {
+                    if (!connectionLimitBySecond[key]) {
+                        connectionLimitBySecond[key] = 0;
+                    }
+                    connectionLimitBySecond[key]++;
+                }
+            });
+            
+            // Create connection limit errors chart
+            createConnectionErrorChart(connectionLimitBySecond, errors);
+            
+            // Create error type distribution chart
+            createErrorTypeChart(errors);
+            
+            // Create error table
+            createErrorTable(errorsBySecond, errors);
+            
+            // Populate table filter (only needs to be done once with full dataset)
+            if (errors === errorData) {
+                populateTableFilter(errors);
+            }
+        }
+        
+        function createConnectionErrorChart(connectionLimitBySecond, errors) {
+            const ctx = document.getElementById('connectionErrorChart');
+            if (!ctx) return;
+            
+            // Save series visibility state before destroying chart
+            if (charts.connectionErrors) {
+                const chart = charts.connectionErrors;
+                chart.data.datasets.forEach((dataset, index) => {
+                    seriesVisibility[dataset.label] = !chart.getDatasetMeta(index).hidden;
+                });
+                charts.connectionErrors.destroy();
+            }
+            
+            // Prepare data for both connection limit errors and partition squashing
+            const allTimes = new Set();
+            const connectionData = {};
+            const partitionData = {};
+            
+            // Get connection limit data
+            Object.entries(connectionLimitBySecond).forEach(([time, count]) => {
+                allTimes.add(parseInt(time));
+                connectionData[time] = count;
+            });
+            
+            // Get partition squashing data from errors parameter
+            errors.filter(e => e.errorType === 'Partition Squashing').forEach(error => {
+                const second = new Date(error.timestamp);
+                second.setMilliseconds(0);
+                const key = second.getTime();
+                allTimes.add(key);
+                
+                if (!partitionData[key]) {
+                    partitionData[key] = 0;
+                }
+                partitionData[key]++;
+            });
+            
+            // Get O3 partition split data
+            const o3SplitData = {};
+            errors.filter(e => e.errorType === 'O3 Partition Split').forEach(error => {
+                const second = new Date(error.timestamp);
+                second.setMilliseconds(0);
+                const key = second.getTime();
+                allTimes.add(key);
+                
+                if (!o3SplitData[key]) {
+                    o3SplitData[key] = 0;
+                }
+                o3SplitData[key]++;
+            });
+            
+            // Create time series arrays
+            const timeLabels = Array.from(allTimes).sort((a, b) => a - b).map(ts => new Date(ts));
+            const connectionCounts = timeLabels.map(time => connectionData[time.getTime()] || 0);
+            const partitionCounts = timeLabels.map(time => partitionData[time.getTime()] || 0);
+            const o3SplitCounts = timeLabels.map(time => o3SplitData[time.getTime()] || 0);
+            
+            charts.connectionErrors = new Chart(ctx.getContext('2d'), {
+                type: 'scatter',
+                data: {
+                    labels: timeLabels,
+                    datasets: [{
+                        label: 'Connection Limit Events',
+                        data: timeLabels.map((time, idx) => connectionCounts[idx] > 0 ? {x: time, y: connectionCounts[idx]} : null).filter(p => p !== null),
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgb(255, 99, 132)',
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }, {
+                        label: 'Partition Squashing Events',
+                        data: timeLabels.map((time, idx) => partitionCounts[idx] > 0 ? {x: time, y: partitionCounts[idx]} : null).filter(p => p !== null),
+                        borderColor: 'rgb(255, 206, 86)',
+                        backgroundColor: 'rgb(255, 206, 86)',
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }, {
+                        label: 'O3 Partition Split Events',
+                        data: timeLabels.map((time, idx) => o3SplitCounts[idx] > 0 ? {x: time, y: o3SplitCounts[idx]} : null).filter(p => p !== null),
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgb(54, 162, 235)',
+                        pointRadius: 5,
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                displayFormats: {
+                                    second: 'HH:mm:ss'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Event Count per Second'
+                            },
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'System Events Over Time'
+                        }
+                    }
+                }
+            });
+            
+            // Restore series visibility state
+            if (Object.keys(seriesVisibility).length > 0) {
+                charts.connectionErrors.data.datasets.forEach((dataset, index) => {
+                    if (dataset.label in seriesVisibility) {
+                        const shouldBeVisible = seriesVisibility[dataset.label];
+                        if (!shouldBeVisible) {
+                            charts.connectionErrors.getDatasetMeta(index).hidden = true;
+                        }
+                    } else {
+                        // Default visibility for new series
+                        seriesVisibility[dataset.label] = true;
+                    }
+                });
+                charts.connectionErrors.update();
+            } else {
+                // Initialize visibility state on first load
+                charts.connectionErrors.data.datasets.forEach((dataset) => {
+                    seriesVisibility[dataset.label] = true;
+                });
+            }
+        }
+        
+        function createErrorTypeChart(errors) {
+            const ctx = document.getElementById('errorTypeChart');
+            if (!ctx) return;
+            
+            // Destroy existing chart if it exists
+            if (charts.errorTypes) {
+                charts.errorTypes.destroy();
+            }
+            
+            // Count errors by type
+            const errorCounts = {};
+            errors.forEach(error => {
+                if (!errorCounts[error.errorType]) {
+                    errorCounts[error.errorType] = 0;
+                }
+                errorCounts[error.errorType]++;
+            });
+            
+            charts.errorTypes = new Chart(ctx.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(errorCounts),
+                    datasets: [{
+                        data: Object.values(errorCounts),
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.7)',
+                            'rgba(54, 162, 235, 0.7)',
+                            'rgba(255, 206, 86, 0.7)',
+                            'rgba(75, 192, 192, 0.7)',
+                            'rgba(153, 102, 255, 0.7)'
+                        ],
+                        borderColor: [
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(54, 162, 235, 1)',
+                            'rgba(255, 206, 86, 1)',
+                            'rgba(75, 192, 192, 1)',
+                            'rgba(153, 102, 255, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Error Type Distribution'
+                        },
+                        legend: {
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.parsed || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = ((value / total) * 100).toFixed(1);
+                                    return `${label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function createErrorTable(errorsBySecond, errors) {
+            const tbody = document.getElementById('errorTableBody');
+            if (!tbody) return;
+            
+            // Create detailed rows with table information for O3 partition splits
+            const rows = [];
+            
+            // Group errors by second, type, and table
+            const detailedErrorsBySecond = {};
+            errors.forEach(error => {
+                const second = new Date(error.timestamp);
+                second.setMilliseconds(0);
+                const key = second.getTime();
+                
+                if (!detailedErrorsBySecond[key]) {
+                    detailedErrorsBySecond[key] = {};
+                }
+                
+                const tableKey = error.tableName || 'N/A';
+                const errorKey = `${error.errorType}|${tableKey}`;
+                
+                if (!detailedErrorsBySecond[key][errorKey]) {
+                    detailedErrorsBySecond[key][errorKey] = {
+                        errorType: error.errorType,
+                        tableName: tableKey,
+                        count: 0
+                    };
+                }
+                detailedErrorsBySecond[key][errorKey].count++;
+            });
+            
+            // Create rows from detailed data
+            Object.entries(detailedErrorsBySecond).forEach(([timestamp, errorGroups]) => {
+                const time = new Date(parseInt(timestamp));
+                Object.values(errorGroups).forEach(errorGroup => {
+                    rows.push({
+                        time: time,
+                        errorType: errorGroup.errorType,
+                        tableName: errorGroup.tableName,
+                        count: errorGroup.count
+                    });
+                });
+            });
+            
+            // Sort by time descending (most recent first)
+            rows.sort((a, b) => b.time - a.time);
+            
+            // Generate HTML
+            tbody.innerHTML = rows.slice(0, 100).map(row => `
+                <tr>
+                    <td>${row.time.toLocaleTimeString()}</td>
+                    <td>
+                        <span class="badge ${getErrorBadgeClass(row.errorType)}">
+                            ${row.errorType}
+                        </span>
+                    </td>
+                    <td><code>${row.tableName === 'N/A' ? '-' : row.tableName}</code></td>
+                    <td>${row.count}</td>
+                </tr>
+            `).join('');
+        }
+        
+        function getErrorBadgeClass(errorType) {
+            const classes = {
+                'Connection Limit': 'bg-danger',
+                'Partition Squashing': 'bg-warning',
+                'O3 Partition Split': 'bg-info'
+            };
+            return classes[errorType] || 'bg-secondary';
+        }
+        
+        // WAL Amplification visualization functions
+        function createWalCharts() {
+            if (!walData || walData.length === 0) return;
+            
+            // Populate table filter
+            populateWalTableFilter();
+            
+            // Create charts with all data initially
+            createWalAmplificationChart(walData);
+            createWalTableMetrics(walData);
+        }
+        
+        function populateWalTableFilter() {
+            const tableFilter = document.getElementById('walTableFilter');
+            if (!tableFilter) return;
+            
+            // Get unique table names from WAL data
+            const tableNames = new Set();
+            walData.forEach(job => {
+                if (job.tableName) {
+                    tableNames.add(job.tableName);
+                }
+            });
+            
+            // Clear existing options except "All Tables"
+            tableFilter.innerHTML = '<option value="all">All Tables</option>';
+            
+            // Add table name options
+            Array.from(tableNames).sort().forEach(tableName => {
+                const option = document.createElement('option');
+                option.value = tableName;
+                option.textContent = tableName;
+                tableFilter.appendChild(option);
+            });
+            
+            // Add event listener for filter changes
+            tableFilter.onchange = () => filterWalByTable();
+        }
+        
+        function filterWalByTable() {
+            const selectedTable = document.getElementById('walTableFilter').value;
+            
+            // Filter WAL data based on selected table
+            let filteredData = walData;
+            if (selectedTable !== 'all') {
+                filteredData = walData.filter(job => job.tableName === selectedTable);
+            }
+            
+            // Recreate charts with filtered data
+            createWalAmplificationChart(filteredData);
+            createWalTableMetrics(filteredData);
+        }
+        
+        function createWalAmplificationChart(data) {
+            const ctx = document.getElementById('walAmplificationChart');
+            const ctxLog = document.getElementById('walAmplificationLogChart');
+            const ctxRate = document.getElementById('walRateChart');
+            const ctxCommit = document.getElementById('walCommitChart');
+            if (!ctx || !ctxLog || !ctxRate || !ctxCommit) return;
+            
+            // Destroy existing charts if they exist
+            if (charts.walAmplification) {
+                charts.walAmplification.destroy();
+            }
+            if (charts.walAmplificationLog) {
+                charts.walAmplificationLog.destroy();
+            }
+            if (charts.walRate) {
+                charts.walRate.destroy();
+            }
+            if (charts.walCommit) {
+                charts.walCommit.destroy();
+            }
+            
+            // Sort data by timestamp
+            const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
+            
+            // Separate apply jobs from commit data
+            const applyJobs = sortedData.filter(job => job.type === 'apply');
+            const commitData = sortedData.filter(job => job.type === 'commit');
+            
+            // Group apply jobs by table for color coding
+            const tableGroups = {};
+            applyJobs.forEach(job => {
+                if (!tableGroups[job.tableName]) {
+                    tableGroups[job.tableName] = [];
+                }
+                tableGroups[job.tableName].push(job);
+            });
+            
+            // Group commit data by table for color coding
+            const commitTableGroups = {};
+            commitData.forEach(commit => {
+                if (!commitTableGroups[commit.tableName]) {
+                    commitTableGroups[commit.tableName] = [];
+                }
+                commitTableGroups[commit.tableName].push(commit);
+            });
+            
+            // Color palette for tables
+            const colorPalette = [
+                'rgb(255, 99, 132)',    // red
+                'rgb(54, 162, 235)',    // blue
+                'rgb(255, 206, 86)',    // yellow
+                'rgb(75, 192, 192)',    // teal
+                'rgb(153, 102, 255)',   // purple
+                'rgb(255, 159, 64)',    // orange
+                'rgb(199, 199, 199)',   // grey
+                'rgb(83, 102, 255)',    // indigo
+                'rgb(255, 99, 255)',    // pink
+                'rgb(99, 255, 132)',    // green
+                'rgb(255, 159, 186)',   // light pink
+                'rgb(159, 226, 191)',   // mint
+            ];
+            
+            // Create datasets for each table (apply jobs)
+            const amplificationDatasets = [];
+            const rateDatasets = [];
+            let colorIndex = 0;
+            Object.entries(tableGroups).forEach(([tableName, jobs]) => {
+                const color = colorPalette[colorIndex % colorPalette.length];
+                
+                // Amplification dataset
+                amplificationDatasets.push({
+                    label: tableName,
+                    data: jobs.map(job => ({
+                        x: job.timestamp,
+                        y: job.amplification,
+                        job: job // Store job reference for tooltip
+                    })),
+                    borderColor: color,
+                    backgroundColor: color,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                });
+                
+                // Rate dataset
+                rateDatasets.push({
+                    label: tableName,
+                    data: jobs.map(job => ({
+                        x: job.timestamp,
+                        y: job.rate,
+                        job: job // Store job reference for tooltip
+                    })),
+                    borderColor: color,
+                    backgroundColor: color,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                });
+                
+                colorIndex++;
+            });
+            
+            // Create commit datasets for each table
+            const commitDatasets = [];
+            colorIndex = 0; // Reset color index to match table colors
+            Object.entries(commitTableGroups).forEach(([tableName, commits]) => {
+                const color = colorPalette[colorIndex % colorPalette.length];
+                
+                commitDatasets.push({
+                    label: tableName,
+                    data: commits.map(commit => ({
+                        x: commit.timestamp,
+                        y: commit.rows,
+                        commit: commit // Store commit reference for tooltip
+                    })),
+                    borderColor: color,
+                    backgroundColor: color,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                });
+                
+                colorIndex++;
+            });
+            
+            charts.walAmplification = new Chart(ctx.getContext('2d'), {
+                type: 'scatter',
+                data: {
+                    datasets: amplificationDatasets
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                displayFormats: {
+                                    second: 'HH:mm:ss'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Amplification Factor'
+                            },
+                            beginAtZero: false
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Write Amplification Over Time'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const job = context.raw.job;
+                                    return [
+                                        `Rows: ${job.rows.toLocaleString()}`,
+                                        `Rate: ${job.rate.toLocaleString()} rows/s`,
+                                        `Time: ${job.timeMs}ms`
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Create logarithmic scale chart with same color-coded datasets
+            charts.walAmplificationLog = new Chart(ctxLog.getContext('2d'), {
+                type: 'scatter',
+                data: {
+                    datasets: amplificationDatasets.map(ds => ({...ds})) // Clone datasets for log chart
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                displayFormats: {
+                                    second: 'HH:mm:ss'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        },
+                        y: {
+                            type: 'logarithmic',
+                            title: {
+                                display: true,
+                                text: 'Amplification Factor (Log Scale)'
+                            },
+                            min: 0.1,
+                            ticks: {
+                                callback: function(value) {
+                                    if (value === 0.1 || value === 1 || value === 10 || value === 100 || value === 1000 || value === 10000) {
+                                        return value.toString();
+                                    }
+                                    return null;
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Write Amplification Over Time (Logarithmic Scale)'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const job = context.raw.job;
+                                    return [
+                                        `Rows: ${job.rows.toLocaleString()}`,
+                                        `Rate: ${job.rate.toLocaleString()} rows/s`,
+                                        `Time: ${job.timeMs}ms`
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Create rate chart
+            charts.walRate = new Chart(ctxRate.getContext('2d'), {
+                type: 'scatter',
+                data: {
+                    datasets: rateDatasets
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                displayFormats: {
+                                    second: 'HH:mm:ss'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Write Rate (rows/s)'
+                            },
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Write Rate Over Time'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const job = context.raw.job;
+                                    return [
+                                        `Rows: ${job.rows.toLocaleString()}`,
+                                        `Amplification: ${job.amplification.toFixed(2)}`,
+                                        `Time: ${job.timeMs}ms`
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Create commit chart
+            charts.walCommit = new Chart(ctxCommit.getContext('2d'), {
+                type: 'scatter',
+                data: {
+                    datasets: commitDatasets
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                displayFormats: {
+                                    second: 'HH:mm:ss'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Rows Committed'
+                            },
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'WAL Commit Rate Over Time'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const commit = context.raw.commit;
+                                    return [
+                                        `Table: ${commit.tableName}`,
+                                        `Rows: ${commit.rows.toLocaleString()}`
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function createWalTableMetrics(data) {
+            // Create bar chart for average amplification by table
+            const ctx = document.getElementById('walTableChart');
+            if (!ctx) return;
+            
+            // Destroy existing chart if it exists
+            if (charts.walTable) {
+                charts.walTable.destroy();
+            }
+            
+            // Group data by table
+            const tableMetrics = {};
+            data.forEach(job => {
+                if (!tableMetrics[job.tableName]) {
+                    tableMetrics[job.tableName] = {
+                        amplifications: [],
+                        totalRows: 0,
+                        rates: [],
+                        count: 0
+                    };
+                }
+                tableMetrics[job.tableName].amplifications.push(job.amplification);
+                tableMetrics[job.tableName].totalRows += job.rows;
+                tableMetrics[job.tableName].rates.push(job.rate);
+                tableMetrics[job.tableName].count++;
+            });
+            
+            // Calculate averages
+            const tableNames = [];
+            const avgAmplifications = [];
+            const tableData = [];
+            
+            Object.entries(tableMetrics).forEach(([table, metrics]) => {
+                const avgAmpl = metrics.amplifications.reduce((a, b) => a + b, 0) / metrics.amplifications.length;
+                const avgRate = metrics.rates.reduce((a, b) => a + b, 0) / metrics.rates.length;
+                
+                tableNames.push(table);
+                avgAmplifications.push(avgAmpl);
+                
+                tableData.push({
+                    table,
+                    avgAmplification: avgAmpl,
+                    totalRows: metrics.totalRows,
+                    avgRate: avgRate,
+                    count: metrics.count
+                });
+            });
+            
+            // Sort by average amplification
+            const sortedIndices = avgAmplifications
+                .map((val, idx) => ({ val, idx }))
+                .sort((a, b) => b.val - a.val)
+                .map(item => item.idx);
+            
+            const sortedTableNames = sortedIndices.map(i => tableNames[i]);
+            const sortedAmplifications = sortedIndices.map(i => avgAmplifications[i]);
+            
+            // Create bar chart
+            charts.walTable = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: sortedTableNames.slice(0, 10), // Top 10 tables
+                    datasets: [{
+                        label: 'Average Amplification',
+                        data: sortedAmplifications.slice(0, 10),
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                        borderColor: 'rgb(75, 192, 192)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    animation: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: 'Amplification Factor'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Top 10 Tables by Average Amplification'
+                        }
+                    }
+                }
+            });
+            
+            // Update metrics table
+            updateWalMetricsTable(tableData);
+        }
+        
+        function updateWalMetricsTable(tableData) {
+            const tbody = document.getElementById('walTableBody');
+            if (!tbody) return;
+            
+            // Sort by average amplification
+            tableData.sort((a, b) => b.avgAmplification - a.avgAmplification);
+            
+            // Generate HTML
+            tbody.innerHTML = tableData.map(data => `
+                <tr>
+                    <td><code>${data.table}</code></td>
+                    <td>${data.avgAmplification.toFixed(2)}</td>
+                    <td>${data.totalRows.toLocaleString()}</td>
+                    <td>${Math.round(data.avgRate).toLocaleString()}</td>
+                    <td>${data.count}</td>
+                </tr>
+            `).join('');
+        }
+        
+        // Initialize tooltips and other Bootstrap components
+        document.addEventListener('DOMContentLoaded', function() {
+            // Any additional initialization can go here
+        });
+    </script>
+</body>
+</html>

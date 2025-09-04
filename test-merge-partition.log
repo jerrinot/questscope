@@ -1,0 +1,1 @@
+2025-09-03T13:24:21.422522Z I i.q.c.TableWriter merged partition [table=`mm_audit_trails`, ts=2025-09-03T18:53:41.000001Z, txn=1457075, rows=120862]

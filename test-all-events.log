@@ -1,0 +1,5 @@
+2025-09-03T13:24:21.422522Z I i.q.c.TableWriter merged partition [table=`mm_audit_trails`, ts=2025-09-03T18:53:41.000001Z, txn=1457075, rows=120862]
+2025-09-03T13:24:25.123456Z I i.q.g.c.o.O3PartitionJob o3 split partition [table=user_events~21, partition=2025-09-03T18:53:41.000001Z]
+2025-09-03T13:24:30.987654Z I i.q.c.wal.seq.TableSquashJob squashing partitions [table=sensor_data~42, partitions=3, rows=45123]
+2025-09-03T13:24:35.567890Z E i.q.n.TcpConnectionListener failed to accept connection [errno=24] max connection limit reached: unregistered listener
+2025-09-03T13:25:21.422522Z I i.q.c.TableWriter merged partition [table=`user_events`, ts=2025-09-03T18:53:42.000001Z, txn=1457076, rows=85432]

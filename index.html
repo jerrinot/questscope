@@ -228,7 +228,7 @@
                 <div class="tab-pane fade" id="errors-pane" role="tabpanel">
                     <div class="chart-container">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h5>Events Over Time</h5>
+                            <h5>All Events Over Time</h5>
                             <div class="d-flex align-items-center gap-3">
                                 <label for="tableFilter" class="form-label mb-0">Filter by Table:</label>
                                 <select id="tableFilter" class="form-select" style="width: 200px;">
@@ -380,6 +380,7 @@
             // Special patterns for table extraction
             const o3PartitionPattern = /o3 split partition \[table=([^,]+)/i;
             const partitionSquashingPattern = /squashing partitions \[table=([^,]+)/i;
+            const mergePartitionPattern = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z).*?TableWriter merged partition \[table=`([^`]+)`, ts=.*?, txn=(\d+), rows=(\d+)\]/;
             
             // WAL amplification pattern - matches both "job finished" and "job ejected"
             const walPattern = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z).*?ApplyWal2TableJob job (?:finished|ejected) \[table=([^,]+), seqTxn=\d+, transactions=(\d+), rows=(\d+), time=(\d+)ms, rate=(\d+)rows\/s, ampl=([\d.]+)\]/;
@@ -482,8 +483,34 @@
                                     message: line.substring(0, 200), // Truncate long messages
                                     file: fileName
                                 });
+                                foundError = true;
                             } catch (e) {
                                 console.warn('Error parsing partition squashing line:', e);
+                            }
+                        }
+                    }
+                    
+                    // Check merge partition pattern to extract table name and row count
+                    if (!foundError) {
+                        const mergeMatch = line.match(mergePartitionPattern);
+                        if (mergeMatch) {
+                            try {
+                                const [, timestampStr, rawTableName, txn, rows] = mergeMatch;
+                                const timestamp = new Date(timestampStr);
+                                // Remove tilde and everything after it
+                                const tableName = rawTableName.split('~')[0];
+                                errors.push({
+                                    timestamp,
+                                    errorType: 'Merge Partition',
+                                    tableName: tableName,
+                                    txn: parseInt(txn),
+                                    rows: parseInt(rows),
+                                    message: line.substring(0, 200), // Truncate long messages
+                                    file: fileName
+                                });
+                                foundError = true;
+                            } catch (e) {
+                                console.warn('Error parsing merge partition line:', e);
                             }
                         }
                     }
@@ -1485,10 +1512,10 @@
             const tableFilter = document.getElementById('tableFilter');
             if (!tableFilter) return;
             
-            // Get unique table names from O3 Partition Split and Partition Squashing errors
+            // Get unique table names from O3 Partition Split, Partition Squashing, and Merge Partition errors
             const tableNames = new Set();
             errors.forEach(error => {
-                if ((error.errorType === 'O3 Partition Split' || error.errorType === 'Partition Squashing') && error.tableName) {
+                if ((error.errorType === 'O3 Partition Split' || error.errorType === 'Partition Squashing' || error.errorType === 'Merge Partition') && error.tableName) {
                     tableNames.add(error.tableName);
                 }
             });
@@ -1515,7 +1542,7 @@
             let filteredErrors = errorData;
             if (selectedTable !== 'all') {
                 filteredErrors = errorData.filter(error => {
-                    if (error.errorType === 'O3 Partition Split' || error.errorType === 'Partition Squashing') {
+                    if (error.errorType === 'O3 Partition Split' || error.errorType === 'Partition Squashing' || error.errorType === 'Merge Partition') {
                         return error.tableName === selectedTable;
                     }
                     // For other events (like Connection Limit), show all
@@ -1558,7 +1585,7 @@
                 }
             });
             
-            // Create connection limit errors chart
+            // Create unified events chart
             createConnectionErrorChart(connectionLimitBySecond, errors);
             
             // Create error type distribution chart
@@ -1586,76 +1613,80 @@
                 charts.connectionErrors.destroy();
             }
             
-            // Prepare data for both connection limit errors and partition squashing
-            const allTimes = new Set();
-            const connectionData = {};
-            const partitionData = {};
+            // Group events by type and table for unified scatter plot
+            const eventDatasets = [];
             
-            // Get connection limit data
-            Object.entries(connectionLimitBySecond).forEach(([time, count]) => {
-                allTimes.add(parseInt(time));
-                connectionData[time] = count;
-            });
+            // Color palette for different event types
+            const eventColors = {
+                'Connection Limit': 'rgb(255, 99, 132)',    // red
+                'Partition Squashing': 'rgb(255, 206, 86)', // yellow
+                'O3 Partition Split': 'rgb(54, 162, 235)',  // blue
+                'Merge Partition': 'rgb(75, 192, 192)'      // teal
+            };
             
-            // Get partition squashing data from errors parameter
-            errors.filter(e => e.errorType === 'Partition Squashing').forEach(error => {
-                const second = new Date(error.timestamp);
-                second.setMilliseconds(0);
-                const key = second.getTime();
-                allTimes.add(key);
+            // Create datasets for each event type
+            const eventTypes = ['Connection Limit', 'Partition Squashing', 'O3 Partition Split', 'Merge Partition'];
+            
+            eventTypes.forEach(eventType => {
+                const eventsOfType = errors.filter(e => e.errorType === eventType);
+                if (eventsOfType.length === 0 && eventType !== 'Connection Limit') return;
                 
-                if (!partitionData[key]) {
-                    partitionData[key] = 0;
-                }
-                partitionData[key]++;
-            });
-            
-            // Get O3 partition split data
-            const o3SplitData = {};
-            errors.filter(e => e.errorType === 'O3 Partition Split').forEach(error => {
-                const second = new Date(error.timestamp);
-                second.setMilliseconds(0);
-                const key = second.getTime();
-                allTimes.add(key);
+                let scatterData = [];
                 
-                if (!o3SplitData[key]) {
-                    o3SplitData[key] = 0;
+                if (eventType === 'Connection Limit') {
+                    // For connection limit, group by second and show count
+                    Object.entries(connectionLimitBySecond).forEach(([timeStr, count]) => {
+                        const time = new Date(parseInt(timeStr));
+                        scatterData.push({
+                            x: time,
+                            y: count,
+                            eventType: eventType,
+                            count: count,
+                            tableName: 'N/A'
+                        });
+                    });
+                } else {
+                    // For other events, show individual events
+                    eventsOfType.forEach(event => {
+                        let yValue = 1; // Default to 1 for count-based events
+                        
+                        if (eventType === 'Merge Partition' && event.rows) {
+                            yValue = event.rows; // Use row count for merge partition events
+                        }
+                        
+                        scatterData.push({
+                            x: event.timestamp,
+                            y: yValue,
+                            eventType: eventType,
+                            tableName: event.tableName || 'N/A',
+                            txn: event.txn,
+                            rows: event.rows,
+                            count: 1
+                        });
+                    });
                 }
-                o3SplitData[key]++;
+                
+                if (scatterData.length > 0) {
+                    eventDatasets.push({
+                        label: eventType,
+                        data: scatterData,
+                        borderColor: eventColors[eventType],
+                        backgroundColor: eventColors[eventType],
+                        pointRadius: eventType === 'Merge Partition' ? 8 : 5,
+                        pointHoverRadius: eventType === 'Merge Partition' ? 10 : 7,
+                        showLine: false
+                    });
+                }
             });
             
-            // Create time series arrays
-            const timeLabels = Array.from(allTimes).sort((a, b) => a - b).map(ts => new Date(ts));
-            const connectionCounts = timeLabels.map(time => connectionData[time.getTime()] || 0);
-            const partitionCounts = timeLabels.map(time => partitionData[time.getTime()] || 0);
-            const o3SplitCounts = timeLabels.map(time => o3SplitData[time.getTime()] || 0);
+            // Determine Y-axis label based on data
+            const hasMergePartitions = eventDatasets.some(ds => ds.label === 'Merge Partition');
+            const yAxisLabel = hasMergePartitions ? 'Event Count / Row Count' : 'Event Count';
             
             charts.connectionErrors = new Chart(ctx.getContext('2d'), {
                 type: 'scatter',
                 data: {
-                    labels: timeLabels,
-                    datasets: [{
-                        label: 'Connection Limit Events',
-                        data: timeLabels.map((time, idx) => connectionCounts[idx] > 0 ? {x: time, y: connectionCounts[idx]} : null).filter(p => p !== null),
-                        borderColor: 'rgb(255, 99, 132)',
-                        backgroundColor: 'rgb(255, 99, 132)',
-                        pointRadius: 5,
-                        pointHoverRadius: 7
-                    }, {
-                        label: 'Partition Squashing Events',
-                        data: timeLabels.map((time, idx) => partitionCounts[idx] > 0 ? {x: time, y: partitionCounts[idx]} : null).filter(p => p !== null),
-                        borderColor: 'rgb(255, 206, 86)',
-                        backgroundColor: 'rgb(255, 206, 86)',
-                        pointRadius: 5,
-                        pointHoverRadius: 7
-                    }, {
-                        label: 'O3 Partition Split Events',
-                        data: timeLabels.map((time, idx) => o3SplitCounts[idx] > 0 ? {x: time, y: o3SplitCounts[idx]} : null).filter(p => p !== null),
-                        borderColor: 'rgb(54, 162, 235)',
-                        backgroundColor: 'rgb(54, 162, 235)',
-                        pointRadius: 5,
-                        pointHoverRadius: 7
-                    }]
+                    datasets: eventDatasets
                 },
                 options: {
                     responsive: true,
@@ -1680,7 +1711,7 @@
                         y: {
                             title: {
                                 display: true,
-                                text: 'Event Count per Second'
+                                text: yAxisLabel
                             },
                             beginAtZero: true
                         }
@@ -1688,7 +1719,38 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: 'System Events Over Time'
+                            text: 'System Events Over Time (Click legend to toggle)'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const point = context.raw;
+                                    const labels = [];
+                                    
+                                    if (point.tableName && point.tableName !== 'N/A') {
+                                        labels.push(`Table: ${point.tableName}`);
+                                    }
+                                    
+                                    if (point.eventType === 'Merge Partition') {
+                                        if (point.txn) labels.push(`Transaction: ${point.txn}`);
+                                        if (point.rows) labels.push(`Rows: ${point.rows.toLocaleString()}`);
+                                    } else if (point.count && point.count > 1) {
+                                        labels.push(`Count: ${point.count}`);
+                                    }
+                                    
+                                    return labels;
+                                }
+                            }
+                        },
+                        legend: {
+                            onClick: function(e, legendItem, legend) {
+                                const index = legendItem.datasetIndex;
+                                const chart = legend.chart;
+                                const meta = chart.getDatasetMeta(index);
+                                
+                                meta.hidden = meta.hidden === null ? !chart.data.datasets[index].hidden : null;
+                                chart.update();
+                            }
                         }
                     }
                 }
@@ -1846,11 +1908,13 @@
             `).join('');
         }
         
+        
         function getErrorBadgeClass(errorType) {
             const classes = {
                 'Connection Limit': 'bg-danger',
                 'Partition Squashing': 'bg-warning',
-                'O3 Partition Split': 'bg-info'
+                'O3 Partition Split': 'bg-info',
+                'Merge Partition': 'bg-success'
             };
             return classes[errorType] || 'bg-secondary';
         }

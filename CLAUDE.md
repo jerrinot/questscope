@@ -67,6 +67,14 @@ The entire application is contained in one HTML file with embedded CSS and JavaS
 3. **Data Processing**: Update the parsing loop and data structure creation
 4. **UI Changes**: Modify the Bootstrap-based HTML structure
 
+### Time Display Requirements
+**IMPORTANT**: All timestamps must be displayed in UTC format across the entire application:
+- **Chart.js configurations**: Use `adapters: { date: { zone: 'UTC' } }` in all time-based scales
+- **Display formats**: Use ISO string format (e.g., `timestamp.toISOString()`) for consistent UTC display
+- **Tables and text**: Append "UTC" label when showing times to users
+- **Tooltips**: Configure Chart.js tooltips with `tooltipFormat: 'yyyy-MM-dd HH:mm:ss'` for UTC display
+- **Never use** `toLocaleString()` or `toLocaleTimeString()` for timestamps as they convert to local timezone
+
 ### Log File Format
 QuestDB rolling logs contain structured entries with timestamps and key-value pairs:
 ```

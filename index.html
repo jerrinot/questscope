@@ -329,6 +329,18 @@
         let charts = {};
         let seriesVisibility = {}; // Track which series are visible
         let fileMetadata = []; // Track file names and timestamp ranges
+        
+        // Helper function to format UTC time for tooltips
+        function formatUTCTime(timestamp) {
+            const date = new Date(timestamp);
+            const year = date.getUTCFullYear();
+            const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+            const day = date.getUTCDate().toString().padStart(2, '0');
+            const hours = date.getUTCHours().toString().padStart(2, '0');
+            const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+            const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} UTC`;
+        }
 
         // File upload handling
         const uploadArea = document.getElementById('uploadArea');
@@ -712,7 +724,7 @@
             
             fileMetadata.forEach(meta => {
                 const timeRange = meta.minTimestamp && meta.maxTimestamp ? 
-                    `${meta.minTimestamp.toLocaleString()} - ${meta.maxTimestamp.toLocaleString()}` : 
+                    `${meta.minTimestamp.toISOString().replace('T', ' ').slice(0, -5)} - ${meta.maxTimestamp.toISOString().replace('T', ' ').slice(0, -5)} UTC` : 
                     'No timestamps found';
                 html += `<tr>
                     <td><code>${meta.fileName}</code></td>
@@ -732,7 +744,7 @@
                     `${(duration / 3600).toFixed(1)} hours`;
                 
                 html += `<div class="mt-2 text-muted">
-                    <strong>Overall Time Range:</strong> ${overallMin.toLocaleString()} - ${overallMax.toLocaleString()} 
+                    <strong>Overall Time Range:</strong> ${overallMin.toISOString().replace('T', ' ').slice(0, -5)} - ${overallMax.toISOString().replace('T', ' ').slice(0, -5)} UTC 
                     <span class="badge bg-secondary ms-2">${durationStr}</span>
                 </div>`;
             }
@@ -911,12 +923,37 @@
                         intersect: false,
                         mode: 'index'
                     },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    return formatUTCTime(context[0].parsed.x);
+                                }
+                            }
+                        }
+                    },
                     scales: {
                         x: {
                             type: 'time',
                             time: {
                                 displayFormats: {
-                                    second: 'HH:mm:ss'
+                                    millisecond: 'HH:mm:ss.SSS',
+                                    second: 'HH:mm:ss',
+                                    minute: 'HH:mm',
+                                    hour: 'HH:mm',
+                                    day: 'MMM dd HH:mm',
+                                    week: 'MMM dd',
+                                    month: 'MMM yyyy'
+                                },
+                                tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    const date = new Date(value);
+                                    const hours = date.getUTCHours().toString().padStart(2, '0');
+                                    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                                    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                                    return `${hours}:${minutes}:${seconds}`;
                                 }
                             },
                             title: {
@@ -934,6 +971,9 @@
                     plugins: {
                         tooltip: {
                             callbacks: {
+                                title: function(context) {
+                                    return formatUTCTime(context[0].parsed.x);
+                                },
                                 afterLabel: function(context) {
                                     const dataPoint = timeGrouped[context.dataIndex];
                                     return `Queries: ${dataPoint.count}`;
@@ -968,12 +1008,37 @@
                         intersect: false,
                         mode: 'index'
                     },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    return formatUTCTime(context[0].parsed.x);
+                                }
+                            }
+                        }
+                    },
                     scales: {
                         x: {
                             type: 'time',
                             time: {
                                 displayFormats: {
-                                    second: 'HH:mm:ss'
+                                    millisecond: 'HH:mm:ss.SSS',
+                                    second: 'HH:mm:ss',
+                                    minute: 'HH:mm',
+                                    hour: 'HH:mm',
+                                    day: 'MMM dd HH:mm',
+                                    week: 'MMM dd',
+                                    month: 'MMM yyyy'
+                                },
+                                tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    const date = new Date(value);
+                                    const hours = date.getUTCHours().toString().padStart(2, '0');
+                                    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                                    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                                    return `${hours}:${minutes}:${seconds}`;
                                 }
                             },
                             title: {
@@ -1093,12 +1158,7 @@
             const queryNames = topQueries.map((q, i) => `Q${i+1}: ${q.query.substring(0, 20)}...`);
             
             // Create time labels with more samples for better horizontal usage
-            const timeLabels = timeGrouped.map(d => d.timestamp.toLocaleTimeString('en-US', {
-                hour12: false,
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            }));
+            const timeLabels = timeGrouped.map(d => d.timestamp.toISOString().slice(11, 19));
             
             // Use more time points for better horizontal space utilization
             const sampleRate = Math.max(1, Math.floor(timeLabels.length / 40)); // Increased from 20 to 40
@@ -1695,12 +1755,37 @@
                         intersect: false,
                         mode: 'index'
                     },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    return formatUTCTime(context[0].parsed.x);
+                                }
+                            }
+                        }
+                    },
                     scales: {
                         x: {
                             type: 'time',
                             time: {
                                 displayFormats: {
-                                    second: 'HH:mm:ss'
+                                    millisecond: 'HH:mm:ss.SSS',
+                                    second: 'HH:mm:ss',
+                                    minute: 'HH:mm',
+                                    hour: 'HH:mm',
+                                    day: 'MMM dd HH:mm',
+                                    week: 'MMM dd',
+                                    month: 'MMM yyyy'
+                                },
+                                tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    const date = new Date(value);
+                                    const hours = date.getUTCHours().toString().padStart(2, '0');
+                                    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                                    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                                    return `${hours}:${minutes}:${seconds}`;
                                 }
                             },
                             title: {
@@ -1723,6 +1808,9 @@
                         },
                         tooltip: {
                             callbacks: {
+                                title: function(context) {
+                                    return formatUTCTime(context[0].parsed.x);
+                                },
                                 afterLabel: function(context) {
                                     const point = context.raw;
                                     const labels = [];
@@ -1896,7 +1984,7 @@
             // Generate HTML
             tbody.innerHTML = rows.slice(0, 100).map(row => `
                 <tr>
-                    <td>${row.time.toLocaleTimeString()}</td>
+                    <td>${row.time.toISOString().slice(11, 19)} UTC</td>
                     <td>
                         <span class="badge ${getErrorBadgeClass(row.errorType)}">
                             ${row.errorType}
@@ -2107,7 +2195,23 @@
                             type: 'time',
                             time: {
                                 displayFormats: {
-                                    second: 'HH:mm:ss'
+                                    millisecond: 'HH:mm:ss.SSS',
+                                    second: 'HH:mm:ss',
+                                    minute: 'HH:mm',
+                                    hour: 'HH:mm',
+                                    day: 'MMM dd HH:mm',
+                                    week: 'MMM dd',
+                                    month: 'MMM yyyy'
+                                },
+                                tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    const date = new Date(value);
+                                    const hours = date.getUTCHours().toString().padStart(2, '0');
+                                    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                                    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                                    return `${hours}:${minutes}:${seconds}`;
                                 }
                             },
                             title: {
@@ -2130,6 +2234,9 @@
                         },
                         tooltip: {
                             callbacks: {
+                                title: function(context) {
+                                    return formatUTCTime(context[0].parsed.x);
+                                },
                                 afterLabel: function(context) {
                                     const job = context.raw.job;
                                     return [
@@ -2158,7 +2265,23 @@
                             type: 'time',
                             time: {
                                 displayFormats: {
-                                    second: 'HH:mm:ss'
+                                    millisecond: 'HH:mm:ss.SSS',
+                                    second: 'HH:mm:ss',
+                                    minute: 'HH:mm',
+                                    hour: 'HH:mm',
+                                    day: 'MMM dd HH:mm',
+                                    week: 'MMM dd',
+                                    month: 'MMM yyyy'
+                                },
+                                tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    const date = new Date(value);
+                                    const hours = date.getUTCHours().toString().padStart(2, '0');
+                                    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                                    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                                    return `${hours}:${minutes}:${seconds}`;
                                 }
                             },
                             title: {
@@ -2190,6 +2313,9 @@
                         },
                         tooltip: {
                             callbacks: {
+                                title: function(context) {
+                                    return formatUTCTime(context[0].parsed.x);
+                                },
                                 afterLabel: function(context) {
                                     const job = context.raw.job;
                                     return [
@@ -2218,7 +2344,23 @@
                             type: 'time',
                             time: {
                                 displayFormats: {
-                                    second: 'HH:mm:ss'
+                                    millisecond: 'HH:mm:ss.SSS',
+                                    second: 'HH:mm:ss',
+                                    minute: 'HH:mm',
+                                    hour: 'HH:mm',
+                                    day: 'MMM dd HH:mm',
+                                    week: 'MMM dd',
+                                    month: 'MMM yyyy'
+                                },
+                                tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    const date = new Date(value);
+                                    const hours = date.getUTCHours().toString().padStart(2, '0');
+                                    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                                    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                                    return `${hours}:${minutes}:${seconds}`;
                                 }
                             },
                             title: {
@@ -2241,6 +2383,9 @@
                         },
                         tooltip: {
                             callbacks: {
+                                title: function(context) {
+                                    return formatUTCTime(context[0].parsed.x);
+                                },
                                 afterLabel: function(context) {
                                     const job = context.raw.job;
                                     return [
@@ -2269,7 +2414,23 @@
                             type: 'time',
                             time: {
                                 displayFormats: {
-                                    second: 'HH:mm:ss'
+                                    millisecond: 'HH:mm:ss.SSS',
+                                    second: 'HH:mm:ss',
+                                    minute: 'HH:mm',
+                                    hour: 'HH:mm',
+                                    day: 'MMM dd HH:mm',
+                                    week: 'MMM dd',
+                                    month: 'MMM yyyy'
+                                },
+                                tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    const date = new Date(value);
+                                    const hours = date.getUTCHours().toString().padStart(2, '0');
+                                    const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                                    const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                                    return `${hours}:${minutes}:${seconds}`;
                                 }
                             },
                             title: {
@@ -2292,6 +2453,9 @@
                         },
                         tooltip: {
                             callbacks: {
+                                title: function(context) {
+                                    return formatUTCTime(context[0].parsed.x);
+                                },
                                 afterLabel: function(context) {
                                     const commit = context.raw.commit;
                                     return [

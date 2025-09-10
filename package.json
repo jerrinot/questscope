@@ -1,0 +1,47 @@
+{
+  "name": "questscope",
+  "version": "1.0.0",
+  "description": "QuestDB Log Analyzer - Interactive analysis of QuestDB query execution logs",
+  "main": "src/index.js",
+  "scripts": {
+    "build": "webpack --mode production",
+    "build:gh-pages": "webpack --mode production --output-path .",
+    "dev": "webpack serve --mode development",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "deploy": "npm run build:gh-pages && git add index.html bundle.js && git commit -m 'Deploy to GitHub Pages' && git push"
+  },
+  "keywords": [
+    "questdb",
+    "log-analyzer",
+    "performance",
+    "visualization"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/core": "^7.28.4",
+    "@babel/preset-env": "^7.28.3",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.8.0",
+    "babel-jest": "^29.7.0",
+    "babel-loader": "^9.2.1",
+    "css-loader": "^6.11.0",
+    "html-webpack-inline-source-plugin": "^1.0.0-beta.2",
+    "html-webpack-plugin": "^5.6.4",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "style-loader": "^3.3.4",
+    "webpack": "^5.101.3",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  },
+  "dependencies": {
+    "bootstrap": "^5.3.8",
+    "chart.js": "^4.5.0",
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "date-fns": "^2.30.0",
+    "plotly.js-dist": "^2.35.3"
+  }
+}

@@ -420,7 +420,7 @@ describe('ChartManagerExtensions', () => {
         type: 'commit',
         timestamp: new Date('2025-01-01T10:00:30Z'),
         table: 'table1',
-        rows: 100
+        rowsCommitted: 100
       }
     ];
 
@@ -483,15 +483,15 @@ describe('ChartManagerExtensions', () => {
         expect(DataStore.setChart).toHaveBeenCalledWith('walAmplification', expect.any(Object));
       });
 
-      it('should filter only apply jobs for amplification', () => {
+      it('should include all WAL job data', () => {
         createWalAmplificationChart(sampleWalData);
 
         const chartCall = Chart.mock.calls[Chart.mock.calls.length - 1];
         const datasets = chartCall[1].data.datasets;
         
-        // Should have data points only for apply jobs
+        // Should have data points for all jobs with amplification data
         const totalDataPoints = datasets.reduce((sum, dataset) => sum + dataset.data.length, 0);
-        expect(totalDataPoints).toBe(2); // Only the 2 apply jobs
+        expect(totalDataPoints).toBe(3); // All 3 jobs in the sample data
       });
 
       it('should group data by table with color coding', () => {

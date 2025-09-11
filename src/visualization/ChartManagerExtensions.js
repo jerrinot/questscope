@@ -386,9 +386,13 @@ export function createConnectionErrorChart(connectionLimitBySecond, errors) {
                     type: 'time',
                     time: {
                         displayFormats: {
+                            millisecond: 'HH:mm:ss.SSS',
                             second: 'HH:mm:ss',
                             minute: 'HH:mm',
-                            hour: 'HH:mm'
+                            hour: 'HH:mm',
+                            day: 'MMM dd HH:mm',
+                            week: 'MMM dd',
+                            month: 'MMM yyyy'
                         },
                         tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
                     },
@@ -400,6 +404,28 @@ export function createConnectionErrorChart(connectionLimitBySecond, errors) {
                     title: {
                         display: true,
                         text: 'Time (UTC)'
+                    },
+                    ticks: {
+                        callback: function(value, index, values) {
+                            const date = new Date(value);
+                            const hours = date.getUTCHours().toString().padStart(2, '0');
+                            const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                            const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                            // Return appropriate format based on the scale
+                            if (this.ticksAsNumbers && this.ticksAsNumbers.length > 0) {
+                                const range = Math.max(...this.ticksAsNumbers) - Math.min(...this.ticksAsNumbers);
+                                if (range > 86400000) { // More than a day
+                                    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+                                    const day = date.getUTCDate().toString().padStart(2, '0');
+                                    return `${month}/${day} ${hours}:${minutes}`;
+                                } else if (range > 3600000) { // More than an hour
+                                    return `${hours}:${minutes}`;
+                                } else { // Less than an hour
+                                    return `${hours}:${minutes}:${seconds}`;
+                                }
+                            }
+                            return `${hours}:${minutes}:${seconds}`;
+                        }
                     }
                 },
                 y: {
@@ -648,12 +674,9 @@ export function createWalAmplificationChart(data) {
     // Sort data by timestamp
     const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
     
-    // Filter only apply jobs for amplification chart
-    const applyJobs = sortedData.filter(job => job.type === 'apply');
-    
-    // Group apply jobs by table for color coding
+    // Group jobs by table for color coding
     const tableGroups = {};
-    applyJobs.forEach(job => {
+    sortedData.forEach(job => {
         if (!tableGroups[job.table]) {
             tableGroups[job.table] = [];
         }
@@ -695,9 +718,13 @@ export function createWalAmplificationChart(data) {
                     type: 'time',
                     time: {
                         displayFormats: {
+                            millisecond: 'HH:mm:ss.SSS',
                             second: 'HH:mm:ss',
                             minute: 'HH:mm',
-                            hour: 'HH:mm'
+                            hour: 'HH:mm',
+                            day: 'MMM dd HH:mm',
+                            week: 'MMM dd',
+                            month: 'MMM yyyy'
                         },
                         tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
                     },
@@ -709,6 +736,28 @@ export function createWalAmplificationChart(data) {
                     title: {
                         display: true,
                         text: 'Time (UTC)'
+                    },
+                    ticks: {
+                        callback: function(value, index, values) {
+                            const date = new Date(value);
+                            const hours = date.getUTCHours().toString().padStart(2, '0');
+                            const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                            const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                            // Return appropriate format based on the scale
+                            if (this.ticksAsNumbers && this.ticksAsNumbers.length > 0) {
+                                const range = Math.max(...this.ticksAsNumbers) - Math.min(...this.ticksAsNumbers);
+                                if (range > 86400000) { // More than a day
+                                    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+                                    const day = date.getUTCDate().toString().padStart(2, '0');
+                                    return `${month}/${day} ${hours}:${minutes}`;
+                                } else if (range > 3600000) { // More than an hour
+                                    return `${hours}:${minutes}`;
+                                } else { // Less than an hour
+                                    return `${hours}:${minutes}:${seconds}`;
+                                }
+                            }
+                            return `${hours}:${minutes}:${seconds}`;
+                        }
                     }
                 },
                 y: {
@@ -760,12 +809,9 @@ export function createWalAmplificationLogChart(data) {
     // Sort data by timestamp
     const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
     
-    // Filter only apply jobs for amplification chart
-    const applyJobs = sortedData.filter(job => job.type === 'apply');
-    
-    // Group apply jobs by table for color coding
+    // Group jobs by table for color coding
     const tableGroups = {};
-    applyJobs.forEach(job => {
+    sortedData.forEach(job => {
         if (!tableGroups[job.table]) {
             tableGroups[job.table] = [];
         }
@@ -807,9 +853,13 @@ export function createWalAmplificationLogChart(data) {
                     type: 'time',
                     time: {
                         displayFormats: {
+                            millisecond: 'HH:mm:ss.SSS',
                             second: 'HH:mm:ss',
                             minute: 'HH:mm',
-                            hour: 'HH:mm'
+                            hour: 'HH:mm',
+                            day: 'MMM dd HH:mm',
+                            week: 'MMM dd',
+                            month: 'MMM yyyy'
                         },
                         tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
                     },
@@ -821,6 +871,28 @@ export function createWalAmplificationLogChart(data) {
                     title: {
                         display: true,
                         text: 'Time (UTC)'
+                    },
+                    ticks: {
+                        callback: function(value, index, values) {
+                            const date = new Date(value);
+                            const hours = date.getUTCHours().toString().padStart(2, '0');
+                            const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                            const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                            // Return appropriate format based on the scale
+                            if (this.ticksAsNumbers && this.ticksAsNumbers.length > 0) {
+                                const range = Math.max(...this.ticksAsNumbers) - Math.min(...this.ticksAsNumbers);
+                                if (range > 86400000) { // More than a day
+                                    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+                                    const day = date.getUTCDate().toString().padStart(2, '0');
+                                    return `${month}/${day} ${hours}:${minutes}`;
+                                } else if (range > 3600000) { // More than an hour
+                                    return `${hours}:${minutes}`;
+                                } else { // Less than an hour
+                                    return `${hours}:${minutes}:${seconds}`;
+                                }
+                            }
+                            return `${hours}:${minutes}:${seconds}`;
+                        }
                     }
                 },
                 y: {
@@ -881,12 +953,9 @@ export function createWalRateChart(data) {
     // Sort data by timestamp
     const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
     
-    // Filter only apply jobs for rate chart
-    const applyJobs = sortedData.filter(job => job.type === 'apply');
-    
-    // Group apply jobs by table for color coding
+    // Group jobs by table for color coding
     const tableGroups = {};
-    applyJobs.forEach(job => {
+    sortedData.forEach(job => {
         if (!tableGroups[job.table]) {
             tableGroups[job.table] = [];
         }
@@ -928,9 +997,13 @@ export function createWalRateChart(data) {
                     type: 'time',
                     time: {
                         displayFormats: {
+                            millisecond: 'HH:mm:ss.SSS',
                             second: 'HH:mm:ss',
                             minute: 'HH:mm',
-                            hour: 'HH:mm'
+                            hour: 'HH:mm',
+                            day: 'MMM dd HH:mm',
+                            week: 'MMM dd',
+                            month: 'MMM yyyy'
                         },
                         tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
                     },
@@ -942,6 +1015,28 @@ export function createWalRateChart(data) {
                     title: {
                         display: true,
                         text: 'Time (UTC)'
+                    },
+                    ticks: {
+                        callback: function(value, index, values) {
+                            const date = new Date(value);
+                            const hours = date.getUTCHours().toString().padStart(2, '0');
+                            const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                            const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                            // Return appropriate format based on the scale
+                            if (this.ticksAsNumbers && this.ticksAsNumbers.length > 0) {
+                                const range = Math.max(...this.ticksAsNumbers) - Math.min(...this.ticksAsNumbers);
+                                if (range > 86400000) { // More than a day
+                                    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+                                    const day = date.getUTCDate().toString().padStart(2, '0');
+                                    return `${month}/${day} ${hours}:${minutes}`;
+                                } else if (range > 3600000) { // More than an hour
+                                    return `${hours}:${minutes}`;
+                                } else { // Less than an hour
+                                    return `${hours}:${minutes}:${seconds}`;
+                                }
+                            }
+                            return `${hours}:${minutes}:${seconds}`;
+                        }
                     }
                 },
                 y: {
@@ -993,8 +1088,8 @@ export function createWalCommitChart(data) {
     // Sort data by timestamp
     const sortedData = [...data].sort((a, b) => a.timestamp - b.timestamp);
     
-    // Filter only commit data
-    const commitData = sortedData.filter(job => job.type === 'commit');
+    // Filter commit data - walCommits have rowsCommitted property
+    const commitData = sortedData.filter(job => job.rowsCommitted !== undefined);
     
     // Group commit data by table for color coding
     const tableGroups = {};
@@ -1015,7 +1110,7 @@ export function createWalCommitChart(data) {
             label: tableName,
             data: commits.map(commit => ({
                 x: commit.timestamp,
-                y: commit.rows,
+                y: commit.rowsCommitted,
                 commit: commit // Store commit reference for tooltip
             })),
             borderColor: color,
@@ -1040,9 +1135,13 @@ export function createWalCommitChart(data) {
                     type: 'time',
                     time: {
                         displayFormats: {
+                            millisecond: 'HH:mm:ss.SSS',
                             second: 'HH:mm:ss',
                             minute: 'HH:mm',
-                            hour: 'HH:mm'
+                            hour: 'HH:mm',
+                            day: 'MMM dd HH:mm',
+                            week: 'MMM dd',
+                            month: 'MMM yyyy'
                         },
                         tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
                     },
@@ -1054,6 +1153,28 @@ export function createWalCommitChart(data) {
                     title: {
                         display: true,
                         text: 'Time (UTC)'
+                    },
+                    ticks: {
+                        callback: function(value, index, values) {
+                            const date = new Date(value);
+                            const hours = date.getUTCHours().toString().padStart(2, '0');
+                            const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                            const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                            // Return appropriate format based on the scale
+                            if (this.ticksAsNumbers && this.ticksAsNumbers.length > 0) {
+                                const range = Math.max(...this.ticksAsNumbers) - Math.min(...this.ticksAsNumbers);
+                                if (range > 86400000) { // More than a day
+                                    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+                                    const day = date.getUTCDate().toString().padStart(2, '0');
+                                    return `${month}/${day} ${hours}:${minutes}`;
+                                } else if (range > 3600000) { // More than an hour
+                                    return `${hours}:${minutes}`;
+                                } else { // Less than an hour
+                                    return `${hours}:${minutes}:${seconds}`;
+                                }
+                            }
+                            return `${hours}:${minutes}:${seconds}`;
+                        }
                     }
                 },
                 y: {
@@ -1078,7 +1199,7 @@ export function createWalCommitChart(data) {
                             const commit = context.raw.commit;
                             return [
                                 `Table: ${commit.table}`,
-                                `Rows: ${commit.rows.toLocaleString()}`
+                                `Rows: ${commit.rowsCommitted.toLocaleString()}`
                             ];
                         }
                     }
@@ -1104,7 +1225,8 @@ export function createWalTableChart(data) {
     // Group data by table and calculate metrics
     const tableMetrics = {};
     data.forEach(job => {
-        if (job.type !== 'apply') return; // Only use apply jobs for amplification metrics
+        // Only use jobs with amplification data
+        if (job.amplification === undefined) return;
         
         if (!tableMetrics[job.table]) {
             tableMetrics[job.table] = {
@@ -1183,7 +1305,8 @@ export function createWalTableMetrics(data) {
     // Group data by table and calculate metrics
     const tableMetrics = {};
     data.forEach(job => {
-        if (job.type !== 'apply') return; // Only use apply jobs for amplification metrics
+        // Only use jobs with amplification data
+        if (job.amplification === undefined) return;
         
         if (!tableMetrics[job.table]) {
             tableMetrics[job.table] = {
@@ -1309,9 +1432,13 @@ export function createPartitionClosingChart() {
                     type: 'time',
                     time: {
                         displayFormats: {
+                            millisecond: 'HH:mm:ss.SSS',
                             second: 'HH:mm:ss',
                             minute: 'HH:mm',
-                            hour: 'HH:mm'
+                            hour: 'HH:mm',
+                            day: 'MMM dd HH:mm',
+                            week: 'MMM dd',
+                            month: 'MMM yyyy'
                         },
                         tooltipFormat: 'yyyy-MM-dd HH:mm:ss'
                     },
@@ -1323,6 +1450,28 @@ export function createPartitionClosingChart() {
                     title: {
                         display: true,
                         text: 'Time (UTC)'
+                    },
+                    ticks: {
+                        callback: function(value, index, values) {
+                            const date = new Date(value);
+                            const hours = date.getUTCHours().toString().padStart(2, '0');
+                            const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+                            const seconds = date.getUTCSeconds().toString().padStart(2, '0');
+                            // Return appropriate format based on the scale
+                            if (this.ticksAsNumbers && this.ticksAsNumbers.length > 0) {
+                                const range = Math.max(...this.ticksAsNumbers) - Math.min(...this.ticksAsNumbers);
+                                if (range > 86400000) { // More than a day
+                                    const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+                                    const day = date.getUTCDate().toString().padStart(2, '0');
+                                    return `${month}/${day} ${hours}:${minutes}`;
+                                } else if (range > 3600000) { // More than an hour
+                                    return `${hours}:${minutes}`;
+                                } else { // Less than an hour
+                                    return `${hours}:${minutes}:${seconds}`;
+                                }
+                            }
+                            return `${hours}:${minutes}:${seconds}`;
+                        }
                     }
                 },
                 y: {

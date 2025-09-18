@@ -421,6 +421,7 @@
             const o3PartitionPattern = /o3 split partition \[table=([^,]+)/i;
             const partitionSquashingPattern = /squashing partitions \[table=([^,]+)/i;
             const mergePartitionPattern = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z).*?TableWriter merged partition \[table=`([^`]+)`, ts=.*?, txn=(\d+), rows=(\d+)\]/;
+            const switchedPartitionPattern = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z).*?TableWriter switched partition \[path=\/([^\/~]+)(?:~\d+)?\/[^\]]+, rowCount=(\d+)\]/;
             
             // WAL amplification pattern - matches both "job finished" and "job ejected"
             const walPattern = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z).*?ApplyWal2TableJob job (?:finished|ejected) \[table=([^,]+), seqTxn=\d+, transactions=(\d+), rows=(\d+), time=(\d+)ms, rate=(\d+)rows\/s, ampl=([\d.]+)\]/;
@@ -560,6 +561,30 @@
                                 foundError = true;
                             } catch (e) {
                                 console.warn('Error parsing merge partition line:', e);
+                            }
+                        }
+                    }
+
+                    // Check switched partition pattern to extract table name and row count
+                    if (!foundError) {
+                        const switchedMatch = line.match(switchedPartitionPattern);
+                        if (switchedMatch) {
+                            try {
+                                const [, timestampStr, rawTableName, rowCount] = switchedMatch;
+                                const timestamp = new Date(timestampStr);
+                                // Remove tilde and everything after it
+                                const tableName = rawTableName.split('~')[0];
+                                errors.push({
+                                    timestamp,
+                                    errorType: 'Switched Partition',
+                                    tableName: tableName,
+                                    rows: parseInt(rowCount),
+                                    message: line.substring(0, 200), // Truncate long messages
+                                    file: fileName
+                                });
+                                foundError = true;
+                            } catch (e) {
+                                console.warn('Error parsing switched partition line:', e);
                             }
                         }
                     }
@@ -2000,10 +2025,10 @@
             const tableFilter = document.getElementById('tableFilter');
             if (!tableFilter) return;
             
-            // Get unique table names from O3 Partition Split, Partition Squashing, and Merge Partition errors
+            // Get unique table names from O3 Partition Split, Partition Squashing, Merge Partition, and Switched Partition errors
             const tableNames = new Set();
             errors.forEach(error => {
-                if ((error.errorType === 'O3 Partition Split' || error.errorType === 'Partition Squashing' || error.errorType === 'Merge Partition') && error.tableName) {
+                if ((error.errorType === 'O3 Partition Split' || error.errorType === 'Partition Squashing' || error.errorType === 'Merge Partition' || error.errorType === 'Switched Partition') && error.tableName) {
                     tableNames.add(error.tableName);
                 }
             });
@@ -2030,7 +2055,7 @@
             let filteredErrors = errorData;
             if (selectedTable !== 'all') {
                 filteredErrors = errorData.filter(error => {
-                    if (error.errorType === 'O3 Partition Split' || error.errorType === 'Partition Squashing' || error.errorType === 'Merge Partition') {
+                    if (error.errorType === 'O3 Partition Split' || error.errorType === 'Partition Squashing' || error.errorType === 'Merge Partition' || error.errorType === 'Switched Partition') {
                         return error.tableName === selectedTable;
                     }
                     // For other events (like Connection Limit), show all
@@ -2111,11 +2136,12 @@
                 'O3 Partition Split': 'rgb(54, 162, 235)',  // blue
                 'Merge Partition': 'rgb(75, 192, 192)',     // teal
                 'Partition Closing': 'rgb(153, 102, 255)',  // purple
-                'PgWire Connection': 'rgb(255, 159, 64)'    // orange
+                'PgWire Connection': 'rgb(255, 159, 64)',   // orange
+                'Switched Partition': 'rgb(128, 128, 0)'    // olive/dark yellow
             };
-            
+
             // Create datasets for each event type
-            const eventTypes = ['Connection Limit', 'Partition Squashing', 'O3 Partition Split', 'Merge Partition', 'Partition Closing', 'PgWire Connection'];
+            const eventTypes = ['Connection Limit', 'Partition Squashing', 'O3 Partition Split', 'Merge Partition', 'Switched Partition', 'Partition Closing', 'PgWire Connection'];
             
             eventTypes.forEach(eventType => {
                 const eventsOfType = errors.filter(e => e.errorType === eventType);
@@ -2169,11 +2195,11 @@
                     // For other events, show individual events
                     eventsOfType.forEach(event => {
                         let yValue = 1; // Default to 1 for count-based events
-                        
-                        if (eventType === 'Merge Partition' && event.rows) {
-                            yValue = event.rows; // Use row count for merge partition events
+
+                        if ((eventType === 'Merge Partition' || eventType === 'Switched Partition') && event.rows) {
+                            yValue = event.rows; // Use row count for merge/switched partition events
                         }
-                        
+
                         scatterData.push({
                             x: event.timestamp,
                             y: yValue,
@@ -2201,11 +2227,12 @@
             
             // Determine Y-axis label based on data
             const hasMergePartitions = eventDatasets.some(ds => ds.label === 'Merge Partition');
+            const hasSwitchedPartitions = eventDatasets.some(ds => ds.label === 'Switched Partition');
             const hasPgWireConnections = eventDatasets.some(ds => ds.label === 'PgWire Connection');
             let yAxisLabel = 'Event Count';
-            if (hasMergePartitions && hasPgWireConnections) {
+            if ((hasMergePartitions || hasSwitchedPartitions) && hasPgWireConnections) {
                 yAxisLabel = 'Event Count / Row Count / Connection Count';
-            } else if (hasMergePartitions) {
+            } else if (hasMergePartitions || hasSwitchedPartitions) {
                 yAxisLabel = 'Event Count / Row Count';
             } else if (hasPgWireConnections) {
                 yAxisLabel = 'Event Count / Connection Count';
@@ -2284,6 +2311,8 @@
                                     
                                     if (point.eventType === 'Merge Partition') {
                                         if (point.txn) labels.push(`Transaction: ${point.txn}`);
+                                        if (point.rows) labels.push(`Rows: ${point.rows.toLocaleString()}`);
+                                    } else if (point.eventType === 'Switched Partition') {
                                         if (point.rows) labels.push(`Rows: ${point.rows.toLocaleString()}`);
                                     } else if (point.eventType === 'Partition Closing') {
                                         if (point.partitionTimestamp) {
@@ -2473,7 +2502,8 @@
                 'Connection Limit': 'bg-danger',
                 'Partition Squashing': 'bg-warning',
                 'O3 Partition Split': 'bg-info',
-                'Merge Partition': 'bg-success'
+                'Merge Partition': 'bg-success',
+                'Switched Partition': 'bg-primary'
             };
             return classes[errorType] || 'bg-secondary';
         }

@@ -2238,11 +2238,66 @@
                 yAxisLabel = 'Event Count / Connection Count';
             }
             
+            // Custom plugin for vertical crosshair
+            const crosshairPlugin = {
+                id: 'crosshair',
+                afterDraw: function(chart) {
+                    if (chart.tooltip._active && chart.tooltip._active.length) {
+                        const ctx = chart.ctx;
+                        const activePoint = chart.tooltip._active[0];
+                        const x = activePoint.element.x;
+                        const topY = chart.scales.y.top;
+                        const bottomY = chart.scales.y.bottom;
+
+                        // Draw the vertical line
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.moveTo(x, topY);
+                        ctx.lineTo(x, bottomY);
+                        ctx.lineWidth = 1;
+                        ctx.strokeStyle = 'rgba(128, 128, 128, 0.5)';
+                        ctx.setLineDash([5, 5]);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+                },
+                afterEvent: function(chart, args) {
+                    if (args.event.type === 'mousemove') {
+                        const canvasPosition = Chart.helpers.getRelativePosition(args.event, chart);
+                        const dataX = chart.scales.x.getValueForPixel(canvasPosition.x);
+                        const dataY = chart.scales.y.getValueForPixel(canvasPosition.y);
+
+                        if (dataX >= chart.scales.x.min && dataX <= chart.scales.x.max &&
+                            dataY >= chart.scales.y.min && dataY <= chart.scales.y.max) {
+                            // Draw vertical line on mouse move
+                            const ctx = chart.ctx;
+                            const x = canvasPosition.x;
+                            const topY = chart.scales.y.top;
+                            const bottomY = chart.scales.y.bottom;
+
+                            // Clear and redraw
+                            chart.draw();
+
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.moveTo(x, topY);
+                            ctx.lineTo(x, bottomY);
+                            ctx.lineWidth = 1;
+                            ctx.strokeStyle = 'rgba(100, 100, 100, 0.3)';
+                            ctx.setLineDash([3, 3]);
+                            ctx.stroke();
+                            ctx.restore();
+                        }
+                    }
+                }
+            };
+
             charts.connectionErrors = new Chart(ctx.getContext('2d'), {
                 type: 'scatter',
                 data: {
                     datasets: eventDatasets
                 },
+                plugins: [crosshairPlugin],
                 options: {
                     responsive: true,
                     animation: false,
